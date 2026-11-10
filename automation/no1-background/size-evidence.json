@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "ugg-tasman-ii-men-musinsa-20261110",
+      "verifiedAt": "2026-11-10T05:30:00Z",
+      "bindings": [
+        {"kreamId":"574093","model":"1174671-CHE","productUrl":"https://www.musinsa.com/products/5331557"},
+        {"kreamId":"574091","model":"1174671-BLK","productUrl":"https://www.musinsa.com/products/5331556"}
+      ],
+      "sourceNameMarker": "[MEN]",
+      "productEvidenceUrl": "https://www.ugg.com/men-slippers/tasman-ii/1174671.html",
+      "chartUrl": "https://www.ugg.com/on/demandware.store/Sites-UGG-US-Site/en_US/Product-SizeChart?cid=size-fit-men-shoes",
+      "localLabelEvidenceUrl": "https://www.shinsegaev.com/goods/initDetailGoods.siv?goods_no=2407722653",
+      "basis": "Manufacturer identifies 1174671 as men's Tasman II and links the men's standard-width size chart. Official chart explicitly pairs US sizes with mm labels. Korean distributor also identifies men's 250 as size 7. Scoped to the inspected Musinsa MEN model variants; not a universal conversion or fit guarantee.",
+      "pairs": {"250":"US 7","260":"US 8","270":"US 9","280":"US 10","290":"US 11","300":"US 12"}
+    }
+  ]
+}

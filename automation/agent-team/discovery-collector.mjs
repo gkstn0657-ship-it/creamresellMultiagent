@@ -4,9 +4,9 @@ import {createCollector} from './collector.mjs';
 import {marketEvidence} from '../no1-background/market-evidence.mjs';
 import {digest} from './store.mjs';
 import {validateCandidate} from './discovery-policy.mjs';
+import {matchMarketSize} from '../no1-background/size-binding.mjs';
 const catalog=JSON.parse(fs.readFileSync(new URL('./catalog-evidence.json',import.meta.url),'utf8'));
 const normalize=s=>String(s||'').toUpperCase().replace(/\s+/g,'');
-const sizeKey=s=>normalize(s).replace(/\([^)]*\)/g,'');
 export function sameColor(a,b){
  const aliases={'블랙':'BLACK','화이트':'WHITE','차콜':'CHARCOAL','그레이':'GREY','GRAY':'GREY','네이비':'NAVY','브라운':'BROWN','베이지':'BEIGE','핑크':'PINK','레드':'RED','블루':'BLUE','그린':'GREEN','체스넛':'CHESTNUT','체스트넛':'CHESTNUT'};
  const clean=s=>[...new Set(String(s||'').toUpperCase().replace(/\(\d+\)/g,'').split(/[\s/,+]+/).filter(Boolean).map(x=>aliases[x]||x))].sort().join('/');
@@ -61,16 +61,17 @@ export async function collectCandidate(candidate,{client=new BackgroundClient(),
    observe('source_quote',quote);sourceQuotes.push({productUrl:source.productUrl,model:stock.makerNumber});
    const marketColor=details?.colorway;
    for(const option of stock.combinedOptions||[]){
-    if(option.limitedQty===0)continue;
+    if(option.limitedQty===0||option.isAvailable===false)continue;
     const sourceColor=sourceOptionColor(stock,option);
     if(!sourceColor||!sameColor(sourceColor.value,marketColor)){gaps.add('sourceColorUnmatched');continue;}
-    const matches=(market?.prices||[]).filter(p=>sizeKey(p.size)===sizeKey(option.size));
-    if(matches.length!==1){gaps.add('sourceSizeUnmatched');continue;}
+    const binding=matchMarketSize({stock,productUrl:source.productUrl,kreamId:candidate.kreamId,sourceSize:option.size,prices:market?.prices||[]});
+    if(!binding){gaps.add('sourceSizeUnmatched');continue;}
     if(offers.length>=3){gaps.add('sourceOptionCoveragePartial');break;}
     const seed={kreamId:candidate.kreamId,productUrl:source.productUrl,model:stock.makerNumber,color:option.firstOption,option:option.size};
     if(offers.some(o=>JSON.stringify(o)===JSON.stringify(seed)))continue;
     check();try{
      const payload=await collectOffer(seed);
+     payload.sizeBinding=binding.evidence;
      // Identity comes from independent market listing and merchant stock responses,
      // not a title similarity guess. Price/benefit conditions remain unconfirmed.
      payload.marketIdentityEvidence={source:'no1-kream-popularity-response',productId:candidate.kreamId,marketModel:candidate.model,sourceModel:stock.makerNumber,marketColor,sourceColor:sourceColor.value,sourceColorBasis:sourceColor.basis,sourceOptionLabel:option.firstOption,observedAt:candidate.discovery.observedAt};

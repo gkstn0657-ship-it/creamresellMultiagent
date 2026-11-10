@@ -1,5 +1,6 @@
 import {safeCode} from './chrome-extension/protocol.mjs';
 import {marketEvidence} from './market-evidence.mjs';
+import {matchMarketSize} from './size-binding.mjs';
 const same = (left, right) => typeof left === 'string' && typeof right === 'string' && left.trim().toUpperCase().replace(/\s+/g, '') === right.trim().toUpperCase().replace(/\s+/g, '');
 export const productProbeTool = {
   name: 'no1_background_product_probe',
@@ -34,12 +35,13 @@ export async function probeProduct(client, args) {
   try { market = await client.request('market:kream:prices', {productCode: args.kreamId}); }
   catch (error) { errors.market = safeCode(error.message); }
   let marketResearch=null;
-  if(market&&['0.3.0','0.4.0','0.5.0'].includes(local.connectorVersion))marketResearch=await marketEvidence(client,args,market);
+  const binding=market?matchMarketSize({stock,productUrl:args.productUrl,kreamId:args.kreamId,sourceSize:args.option,prices:market.prices}):null;
+  if(market&&['0.3.0','0.4.0','0.5.0'].includes(local.connectorVersion))marketResearch=await marketEvidence(client,{...args,option:binding?.price.size||args.option},market);
   if(marketResearch)for(const [key,value] of Object.entries(marketResearch.errors))errors['market_'+key]=value;
   return {
     mode: 'background-relay', queryStatus: Object.keys(errors).length ? 'partial' : 'complete', errors, startedAt, observedAt: new Date().toISOString(), request: args,
     identity: {sourceProductVerified: true, sourceModelVerified: true, sourceOptionVerified: true, marketModelIndependentlyVerified: false, marketBinding: 'requested-product-id-and-matched-relay-response'},
-    stock: {...stock, selectedOption: selected, selectedStockQuantity: stockQuantity}, benefits, market, marketResearch,
+    stock: {...stock, selectedOption: selected, selectedStockQuantity: stockQuantity}, benefits, market, marketResearch, sizeBinding:binding?.evidence||null,
     sourceDataAsOf: null, upstreamFreshnessConfirmed: false, actualCheckoutPriceConfirmed: false,
     promotionAllowed: false, decision: 'hold',
     missingFields: [...(benefits ? [] : ['benefitQuote']), ...(market ? [] : ['marketPrices']), 'marketModelIndependentEvidence', 'upstreamDataAsOf', ...(marketResearch?.trades?.coverageComplete?[]:['transactions30d']), 'actualCheckoutPrice', 'shippingAndSellerFees', 'couponQuantityEligibilityAtCheckout',...Object.values(marketResearch?.errors||{})]
