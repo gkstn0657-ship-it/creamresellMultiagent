@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {runBatch} from './batch.mjs';
+import {runBatch,prepareBatch} from './batch.mjs';
 import {groupProducts,makePacket,validatePacket} from './packets.mjs';
 const seed=n=>({kreamId:String(n),productUrl:`https://www.musinsa.com/products/${n}`,model:`M${n}`,color:'BLACK',option:'L'});
 const temp=()=>fs.mkdtempSync(path.join(os.tmpdir(),'cream-batch-test-'));
@@ -33,4 +33,36 @@ test('the same batch cannot collect concurrently in two workers',async()=>{
   const dir=temp();let release;const gate=new Promise(r=>{release=r;});
   const first=runBatch({dir,seeds:[seed(1)],mode:'fixture',collect:async request=>{await gate;return {request};},analyze:async()=>({status:'complete',assessment:{decision:'hold'}})});
   await assert.rejects(()=>runBatch({dir,seeds:[seed(1)]}),/BATCH_ALREADY_RUNNING/);release();await first;
+});
+
+const saveComplete=(dir,packet)=>{
+ const state={status:'complete',packetId:packet.id,assessment:{decision:'hold'}};
+ const target=path.join(dir,'judgments',packet.productId);fs.mkdirSync(target,{recursive:true});fs.writeFileSync(path.join(target,'team-state.json'),JSON.stringify(state));return state;
+};
+const oldCollect=async request=>({request,observedAt:new Date(Date.now()-700000).toISOString()});
+test('live resume refreshes only unfinished stale products and never rejudges completed scope',async()=>{
+ const dir=temp(),seeds=[seed(1),seed(2)];await prepareBatch({dir,seeds,collect:oldCollect});
+ const first=JSON.parse(fs.readFileSync(path.join(dir,'packets','product-1.json')));saveComplete(dir,first);
+ const collected=[],judged=[];
+ const result=await runBatch({dir,seeds,resume:true,collect:async request=>{collected.push(request.kreamId);return {request};},analyze:async({packet})=>{judged.push(packet.productId);return saveComplete(dir,packet);}});
+ assert.deepEqual(collected,['2']);assert.deepEqual(judged,['2']);assert.equal(result.results[0].reused,true);assert.equal(result.status,'complete');
+ const again=await runBatch({dir,seeds,resume:true,collect:async()=>{throw Error('must not recollect');},analyze:async()=>{throw Error('must not rejudge');}});
+ assert.equal(again.status,'complete');assert.ok(again.results.every(x=>x.reused));
+ await assert.rejects(runBatch({dir,seeds:[seed(1)],resume:true}),/BATCH_SCOPE_CHANGED/);
+});
+test('interruption after a refreshed packet write cannot invalidate the previous manifest',async()=>{
+ const dir=temp(),seeds=[seed(1),seed(2)];await prepareBatch({dir,seeds,collect:oldCollect});
+ const before=JSON.parse(fs.readFileSync(path.join(dir,'collection-complete.json'))).packetIds;
+ await assert.rejects(runBatch({dir,seeds,resume:true,collect:async request=>({request}),onEvent:e=>{if(e.type==='product_collected')throw Error('SIMULATED_CRASH');}}),/SIMULATED_CRASH/);
+ assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir,'collection-complete.json'))).packetIds,before);
+ const result=await runBatch({dir,seeds,resume:true,collect:async request=>({request}),analyze:async({packet})=>saveComplete(dir,packet)});
+ assert.equal(result.status,'complete');assert.equal(result.judged,2);
+});
+test('product concurrency stays at two while collected packets wait for judgment',async()=>{
+ const dir=temp(),releases=[];let active=0,maximum=0,started=0;
+ const pending=runBatch({dir,seeds:[seed(1),seed(2),seed(3)],mode:'fixture',concurrency:2,collect:async request=>({request}),
+  analyze:async()=>{started++;active++;maximum=Math.max(maximum,active);await new Promise(resolve=>releases.push(resolve));active--;return {status:'complete',assessment:{decision:'hold'}};}});
+ while(releases.length<2)await new Promise(resolve=>setImmediate(resolve));assert.equal(started,2);releases.shift()();
+ while(started<3)await new Promise(resolve=>setImmediate(resolve));releases.splice(0).forEach(resolve=>resolve());
+ const result=await pending;assert.equal(maximum,2);assert.equal(result.status,'complete');
 });
