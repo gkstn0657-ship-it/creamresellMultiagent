@@ -5,6 +5,16 @@ import {createBridge} from './bridge.mjs';
 import {BackgroundClient} from './client.mjs';
 import {dispatchBackground} from './mcp.mjs';
 const key = 'a'.repeat(64);
+test('version mismatch reports only sanitized version and keeps product gate closed',async t=>{
+ const {bridge,send}=await fixture(t);
+ await send('/next',null,{'X-No1-Connector-Version':'0.5.0'});
+ assert.equal(bridge.status().observedConnectorVersion,'0.5.0');
+ assert.equal(bridge.status().requiredConnectorVersion,'0.6.0');
+ assert.equal(bridge.status().connectorVersion,null);
+ assert.equal(bridge.status().pipelineProductQueriesEnabled,false);
+ await send('/next',null,{'X-No1-Connector-Version':'private-value'});
+ assert.equal(bridge.status().observedConnectorVersion,null);
+});
 test('pipeline capability follows connector connectivity, not authentication proof',async t=>{
  const {bridge,send}=await fixture(t);assert.equal(bridge.status().pipelineProductQueriesEnabled,false);
  await send('/next',null,{'X-No1-Connector-Version':'0.6.0'});
