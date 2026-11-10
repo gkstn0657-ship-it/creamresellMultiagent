@@ -2,7 +2,7 @@ import {projectHistory,projectMarginSettings,projectDisplayedSchema} from './sch
 import {validRankingRequest,projectRankingSettings,projectRankingProducts} from './ranking-data.mjs';
 export const RELAY_URL = 'wss://relay.certi.life/ws/v2';
 export const CLIENT_VERSION = '1.35.8';
-export const CONNECTOR_VERSION = '0.7.0';
+export const CONNECTOR_VERSION = '0.8.0';
 export const PRODUCT_COMMANDS = Object.freeze(['musinsa:ranking:settings','musinsa:ranking:products','mecro:inventory:search', 'stock:check', 'market:kream:prices', 'market:kream:details', 'market:kream:trades', 'market:kream:askPreviewBatch', 'market:kream:history:start', 'market:kream:displayed-schema', 'musinsa:product:benefit']);
 export const COMMANDS = Object.freeze(['stock:supportedSites', 'musinsa:ranking:check-login', 'settings:get', 'platform:status', 'market:margin-settings', ...PRODUCT_COMMANDS]);
 const errorCodes = new Set(['NO_ELECTRON_CONNECTED', 'ELECTRON_DISCONNECTED', 'ELECTRON_OFFLINE', 'ELECTRON_SEND_FAILED', 'RECONNECTING', 'CMD_NOT_FOUND', 'REMOTE_COMMAND_FORBIDDEN', 'MAINTENANCE', 'TIMEOUT', 'NO1_AUTH_REQUIRED', 'NO1_WEB_TAB_REQUIRED', 'NO1_MULTIPLE_WEB_SESSIONS', 'NO1_BROWSER_ACCESS_FAILED', 'NO1_RELAY_CONNECTION_FAILED', 'NO1_RELAY_CLOSED', 'NO1_RELAY_TIMEOUT', 'NO1_INVALID_RESPONSE', 'NO1_COMMAND_FORBIDDEN', 'NO1_INVALID_PAYLOAD', 'NO1_BRIDGE_TIMEOUT', 'NO1_BRIDGE_DISCONNECTED', 'NO1_BRIDGE_BUSY', 'NO1_CONNECTION_STOPPED', 'NO1_BRIDGE_NOT_CONFIGURED', 'NO1_BRIDGE_UNAVAILABLE', 'NO1_INVALID_BRIDGE_CONFIG', 'NO1_PRODUCT_QUERIES_UNVERIFIED']);
@@ -20,7 +20,7 @@ export function validateCommand(cmd, payload) {
   if (!payload || Array.isArray(payload) || typeof payload !== 'object') throw Error('NO1_INVALID_PAYLOAD');
   let valid;
   if (cmd === 'musinsa:ranking:products') valid = validRankingRequest(payload);
-  else if (cmd === 'mecro:inventory:search') valid = keys(payload, ['keyword','cursor'], ['keyword','cursor']) && payload.keyword === ' ' && typeof payload.cursor === 'string' && /^\d{1,12}$/.test(payload.cursor);
+  else if (cmd === 'mecro:inventory:search') valid = keys(payload, ['keyword','cursor'], ['keyword','cursor']) && (payload.keyword === ' ' || typeof payload.keyword === 'string' && payload.keyword.trim() === payload.keyword && /^[\p{L}\p{N}][\p{L}\p{N} ._()/+-]{0,99}$/u.test(payload.keyword)) && typeof payload.cursor === 'string' && /^\d{1,12}$/.test(payload.cursor);
   else if (cmd === 'stock:check') valid = keys(payload, ['url'], ['url']) && typeof payload.url === 'string' && /^https:\/\/www\.musinsa\.com\/products\/\d{1,12}$/.test(payload.url);
   else if (cmd === 'market:kream:prices') valid = keys(payload, ['productCode', 'size'], ['productCode']) && id(payload.productCode) && (payload.size === undefined || typeof payload.size === 'string' && payload.size.length > 0 && payload.size.length <= 64 && payload.size.trim() === payload.size && !/[\x00-\x1f]/.test(payload.size));
   else if (cmd === 'market:kream:details') valid = keys(payload, ['productCode', 'includeFastDelivery'], ['productCode', 'includeFastDelivery']) && id(payload.productCode) && typeof payload.includeFastDelivery === 'boolean';

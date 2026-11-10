@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "No1 Background Connector",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "minimum_chrome_version": "120",
   "description": "기존 No1 웹 로그인으로 조회 결과만 로컬 MCP에 전달합니다. 탭이나 창을 열지 않습니다.",
   "permissions": [

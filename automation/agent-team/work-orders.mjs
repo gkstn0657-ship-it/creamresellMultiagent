@@ -12,12 +12,14 @@ export const workPolicy={scopeMode:'ask-user-per-work',dailyLimit:null,maxBatchP
 export function workOrders(root){const dir=orderDir(root);return fs.existsSync(dir)?fs.readdirSync(dir).filter(n=>/^work-[a-f0-9-]{36}\.json$/.test(n)).map(n=>read(path.join(dir,n))).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)):[];}
 export function workSummary(root,work){
  if(!work)return {status:'awaiting_user_scope',policy:workPolicy,requiredQuestion:'이번 작업에서 상품을 몇 개 탐색할까요?'};
- const entries=work.entries.map(e=>{const dir=path.join(root,e.runId),state=read(path.join(dir,'batch-state.json')),proc=read(path.join(dir,'process.json'));return {...e,status:state?.status||'starting',workerAlive:alive(proc?.pid),judged:state?.judged||0};});
+ const entries=work.entries.map(e=>{const dir=path.join(root,e.runId),state=read(path.join(dir,'batch-state.json')),proc=read(path.join(dir,'process.json'));return {...e,status:state?.status||'starting',workerAlive:alive(proc?.pid),judged:state?.judged||0,qualifiedProductIds:(state?.results||[]).filter(r=>r.status==='complete'&&r.assessment?.decision==='adopt'&&r.assessment?.reviewId&&r.qualification?.passed===true).map(r=>r.productId)};});
  const reserved=entries.reduce((n,e)=>n+e.productCount,0),activeRunIds=entries.filter(e=>e.workerAlive&&!['complete','stopped','needs_attention','prefetching','prefetched'].includes(e.status)).map(e=>e.runId);
- const remaining=Math.max(0,work.targetProducts-reserved);
+ const qualifiedProductIds=[...new Set(entries.flatMap(e=>e.qualifiedProductIds))];
+ const profitTarget=work.scopeMode==='profitable-results';
+ const remaining=Math.max(0,profitTarget?work.targetProfitableProducts-qualifiedProductIds.length:work.targetProducts-reserved);
  const exploration=explorationState(root,work.id);
  const status=work.status==='stopped'?'stopped':activeRunIds.length||exploration?.workerAlive?'running':['needs_attention','source_exhausted'].includes(exploration?.status)?exploration.status:remaining?'ready':entries.every(e=>e.status==='complete')?'complete':'needs_attention';
- return {workId:work.id,status,targetProducts:work.targetProducts,reservedProducts:reserved,remainingProducts:remaining,judgedProducts:entries.reduce((n,e)=>n+e.judged,0),activeRunIds,entries,exploration,createdAt:work.createdAt,userInstruction:work.userInstruction,policy:workPolicy};
+ return {workId:work.id,status,...(profitTarget?{scopeMode:work.scopeMode,targetProfitableProducts:work.targetProfitableProducts,profitableProductsFound:qualifiedProductIds.length,qualifiedProductIds}:{}),targetProducts:work.targetProducts,reservedProducts:reserved,remainingProducts:remaining,judgedProducts:entries.reduce((n,e)=>n+e.judged,0),activeRunIds,entries,exploration,createdAt:work.createdAt,userInstruction:work.userInstruction,policy:workPolicy};
 }
 export function currentWork(root){return workOrders(root).find(w=>{const s=workSummary(root,w);return w.status!=='stopped'&&(s.status!=='complete');})||null;}
 export function scopeStatus(root,{eventId}={}){
@@ -31,15 +33,18 @@ export async function withWorkLock(root,fn){
  if(fd===undefined)throw Error('WORK_CONTROL_BUSY');fs.writeFileSync(fd,String(process.pid));fs.closeSync(fd);
  try{return await fn();}finally{if(fs.existsSync(file)&&fs.readFileSync(file,'utf8')===String(process.pid))fs.unlinkSync(file);}
 }
-export function startWork(root,{targetProducts,userInstruction,requestId}){
- if(!Number.isSafeInteger(targetProducts)||targetProducts<1)throw Error('USER_PRODUCT_COUNT_REQUIRED');
+export function startWork(root,{targetProducts,targetProfitableProducts,userInstruction,requestId}){
+ const profitTarget=targetProfitableProducts!==undefined;
+ if(profitTarget&&targetProducts!==undefined)throw Error('AMBIGUOUS_WORK_SCOPE');
+ const target=profitTarget?targetProfitableProducts:targetProducts;
+ if(!Number.isSafeInteger(target)||target<1)throw Error('USER_PRODUCT_COUNT_REQUIRED');
  if(typeof userInstruction!=='string'||!userInstruction.trim()||userInstruction.length>4000)throw Error('USER_SCOPE_INSTRUCTION_REQUIRED');
  if(typeof requestId!=='string'||!requestId.trim()||requestId.length>160)throw Error('WORK_REQUEST_ID_REQUIRED');
  const hex=crypto.createHash('sha256').update(requestId).digest('hex').slice(0,32),id='work-'+hex.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5');
  const file=path.join(orderDir(root),id+'.json'),old=read(file);
- if(old){if(old.targetProducts!==targetProducts||old.userInstruction!==userInstruction)throw Error('WORK_REQUEST_SCOPE_CONFLICT');return {...workSummary(root,old),reused:true};}
+ if(old){if((profitTarget?old.scopeMode!=='profitable-results'||old.targetProfitableProducts!==targetProfitableProducts:old.scopeMode==='profitable-results'||old.targetProducts!==targetProducts)||old.userInstruction!==userInstruction)throw Error('WORK_REQUEST_SCOPE_CONFLICT');return {...workSummary(root,old),reused:true};}
  if(currentWork(root))throw Error('WORK_SCOPE_ALREADY_ACTIVE: finish or explicitly stop it before opening another');
- const work={id,status:'open',targetProducts,userInstruction,requestId,createdAt:new Date().toISOString(),entries:[]};writeJsonAtomic(file,work);return workSummary(root,work);
+ const work={id,status:'open',targetProducts:profitTarget?null:targetProducts,...(profitTarget?{scopeMode:'profitable-results',targetProfitableProducts,source:'no1-musinsa-ranking'}:{}),userInstruction,requestId,createdAt:new Date().toISOString(),entries:[]};writeJsonAtomic(file,work);return workSummary(root,work);
 }
 export function reserveWork(root,{workId,runId,productCount,triggerEventId=null,requestId=null,scopeHash=null,prefetchAfterRunId=null}){
  const orders=workOrders(root),reserved=orders.find(w=>w.entries.some(e=>e.runId===runId));

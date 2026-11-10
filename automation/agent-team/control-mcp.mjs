@@ -22,6 +22,7 @@ export const controlTools=[
   {name:'cream_panel_ready',description:'UI-only acknowledgement after the panel renders. Acknowledge a mounted component; never call this from the model to simulate a display.',inputSchema:object({uiVersion:str}),_meta:{ui:{visibility:['app']},'openai/visibility':'private','openai/widgetAccessible':true}},
   {name:'cream_panel_data',description:'Refresh Cream management data or read one product detail. Does not collect products, run models, or open desktop windows.',inputSchema:object({runId,productId:str},[]),_meta:{ui:{visibility:['app','model']}}},
   {name:'cream_work_start',description:'Open a new work order ONLY after the user specifies the number of products or answers the scope question. Ask how many at the start of each new user work request; never silently choose 100. Record their actual instruction. Does not launch collection. Reuse requestId on retries.',inputSchema:object({targetProducts:{type:'integer',minimum:1},userInstruction:str,requestId:{type:'string',minLength:1,maxLength:160}})},
+  {name:'cream_musinsa_profit_work_start',description:'Open a Musinsa ranking work order only when the user explicitly requests finding N profitable candidates, not merely inspecting N products. Counts distinct independently reviewed adopted candidates with positive margin, available matched stock and recent sales evidence. No purchases.',inputSchema:object({targetProfitableProducts:{type:'integer',minimum:1},userInstruction:str,requestId:{type:'string',minLength:1,maxLength:160}})},
   {name:'cream_work_stop',description:'Stop the specified work order and request interruption of its batches. Retains results and prevents further automatic starts in that scope.',inputSchema:object({workId})},
   {name:'cream_explore_start',description:'Start deterministic full-catalog exploration for an existing user-confirmed work order. Continues the saved popularity-feed cursor and category rotation across separate user requests; no discovery AI. The PC automatically runs all remaining batches within N (5 per batch, 2 product AI agents). Do not supply handpicked seeds or launch another batch from completion events while this runner manages the work. Retry with the same workId. Set resume=true only for an explicit continuation of interrupted work.',inputSchema:object({workId,resume:{type:'boolean'}},['workId'])},
   {name:'cream_discovery_status',description:'Read persistent discovery cursor, category queues, coverage limitations and work progress. No collection or AI calls.',inputSchema:object({},[])},
@@ -53,13 +54,14 @@ export async function control(name,args={},options={}) {
   if(!controlTools.some(t=>t.name===name))throw Error('UNKNOWN_CONTROL_TOOL');
   if(name==='cream_panel_ready')return {acknowledged:true,scope:'local-ui-test'};
   if(name==='cream_open_panel'||name==='cream_panel_data')return panelData(args,options);
-  if(name==='cream_work_start')return withWorkLock(root,()=>startWork(root,args));
+  if(['cream_work_start','cream_musinsa_profit_work_start'].includes(name))return withWorkLock(root,()=>startWork(root,args));
   if(name==='cream_work_stop')return withWorkLock(root,()=>stopWork(root,args.workId));
   if(name==='cream_explore_start')return startExploration(root,args,options);
   if(name==='cream_discovery_status')return {discovery:discoveryStatus(root),work:scopeStatus(root)};
   const profile=name==='cream_musinsa_batch_start'?MUSINSA_PROFILE:'general';
   if(name==='cream_musinsa_batch_start')name='cream_batch_start';
   if(name==='cream_batch_start'){
+    if(profile!=='musinsa-ranking'&&workOrders(root).some(w=>w.id===args.workId&&w.scopeMode==='profitable-results'))throw Error('MUSINSA_PROFILE_REQUIRED');
     return withWorkLock(root,async()=>{
     if(workOrders(root).some(w=>{const e=explorationState(root,w.id);return w.status!=='stopped'&&e&&(e.workerAlive||e.status!=='complete');}))throw Error('EXPLORATION_MANAGES_BATCHES: read status; resume the same exploration instead of launching a separate batch');
     const groups=groupProducts(args.products),concurrency=args.concurrency??2;
