@@ -1,0 +1,98 @@
+{
+  "checkedAt": "2026-11-10T10:33:10.215Z",
+  "reference": {
+    "kreamId": "797025",
+    "model": "27103207",
+    "size": "UK4",
+    "sourceSize": "230",
+    "userEvaluation": "passed_user_reported",
+    "userAvailability": "unavailable"
+  },
+  "live": {
+    "observedAt": "2026-11-10T10:29:49.703Z",
+    "source": {
+      "productUrl": "https://www.musinsa.com/products/7325399",
+      "model": "27103207",
+      "name": "리더 - 다크 브라운 크레이지 호스 / 27103207",
+      "size": "230",
+      "stockQuantity": 0,
+      "optionAvailable": false
+    },
+    "benefitPrice": 164680,
+    "paymentConditionalPrice": 159680,
+    "paymentEligibilityConfirmed": false,
+    "feeSettings": {
+      "purchasePrice": 164680,
+      "desiredSellingPrice": null,
+      "feePercent": 6,
+      "inspectionFee": 2500,
+      "taxMode": false,
+      "applyFeeEvent": true,
+      "marginMode": null
+    },
+    "status": "partial",
+    "errors": {
+      "market": "NO1_PLATFORM_LOGIN_REQUIRED"
+    }
+  },
+  "currentNo1MarginVerified": false,
+  "selectedSize30DayTradesVerified": false,
+  "publicSample": {
+    "url": "https://kream.co.kr/products/797025",
+    "salePrice": 234000,
+    "currentQuoteVerified": false,
+    "deliveryModeVerified": false
+  },
+  "calculations": [
+    {
+      "salePrice": 234000,
+      "purchasePrice": 179000,
+      "marginAmount": 38460,
+      "marginRatePercent": 16.4,
+      "classification": "scenario_public_trade_sample_not_current_No1_quote"
+    },
+    {
+      "salePrice": 234000,
+      "purchasePrice": 164680,
+      "marginAmount": 52780,
+      "marginRatePercent": 22.6,
+      "classification": "scenario_public_trade_sample_not_current_No1_quote"
+    },
+    {
+      "salePrice": 234000,
+      "purchasePrice": 159680,
+      "marginAmount": 57780,
+      "marginRatePercent": 24.7,
+      "classification": "scenario_public_trade_sample_not_current_No1_quote"
+    },
+    {
+      "salePrice": 222300,
+      "purchasePrice": 164680,
+      "marginAmount": 41782,
+      "marginRatePercent": 18.8,
+      "classification": "scenario_public_trade_sample_not_current_No1_quote"
+    },
+    {
+      "salePrice": 210600,
+      "purchasePrice": 164680,
+      "marginAmount": 30784,
+      "marginRatePercent": 14.6,
+      "classification": "scenario_public_trade_sample_not_current_No1_quote"
+    },
+    {
+      "salePrice": 198900,
+      "purchasePrice": 164680,
+      "marginAmount": 19786,
+      "marginRatePercent": 9.9,
+      "classification": "scenario_public_trade_sample_not_current_No1_quote"
+    }
+  ],
+  "validation": {
+    "automatedTests": 184,
+    "failures": 0,
+    "liveSourceAndBenefit": true,
+    "authenticatedMarketE2E": false,
+    "arithmetic": true
+  },
+  "purchaseAuthorized": false
+}
