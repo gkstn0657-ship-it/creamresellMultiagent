@@ -44,6 +44,6 @@ export async function probeProduct(client, args) {
     stock: {...stock, selectedOption: selected, selectedStockQuantity: stockQuantity}, benefits, market, marketResearch, sizeBinding:binding?.evidence||null,
     sourceDataAsOf: null, upstreamFreshnessConfirmed: false, actualCheckoutPriceConfirmed: false,
     promotionAllowed: false, decision: 'hold',
-    missingFields: [...(benefits ? [] : ['benefitQuote']), ...(market ? [] : ['marketPrices']), 'marketModelIndependentEvidence', 'upstreamDataAsOf', ...(marketResearch?.trades?.coverageComplete?[]:['transactions30d']), 'actualCheckoutPrice', 'shippingAndSellerFees', 'couponQuantityEligibilityAtCheckout',...Object.values(marketResearch?.errors||{})]
+    missingFields: [...(benefits ? [] : ['benefitQuote']), ...(market ? [] : ['marketPrices']), ...(binding?[]:['marketSizeBinding']), 'marketModelIndependentEvidence', 'upstreamDataAsOf', ...(marketResearch?.trades?.coverageComplete?[]:['transactions30d']), ...(marketResearch?.selectedTrades?.coverageComplete?[]:['selectedOptionTransactions30d']), 'actualCheckoutPrice', 'shippingAndSellerFees', 'couponQuantityEligibilityAtCheckout',...Object.values(marketResearch?.errors||{})]
   };
 }
