@@ -1,0 +1,11 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
+import {liveDashboardData,createDashboardServer} from './server.mjs';
+test('dashboard reports waiting as waiting and shows only saved reviewed results',async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'cream-live-desk-')),id='work-11111111-2222-3333-4444-555555555555',batch='batch-11111111-2222-3333-4444-555555555555',dir=path.join(root,'explorations',id);
+ fs.mkdirSync(path.join(root,'work-orders'),{recursive:true});fs.mkdirSync(dir,{recursive:true});fs.mkdirSync(path.join(root,batch),{recursive:true});
+ fs.writeFileSync(path.join(root,'work-orders',id+'.json'),JSON.stringify({id,status:'open',continuous:true,targetProfitableProducts:10,createdAt:'2026-11-10T00:00:00Z'}));
+ fs.writeFileSync(path.join(dir,'state.json'),JSON.stringify({status:'waiting_for_retry',checkedSources:368,profitableProductsFound:1,waitReason:'NO1_WEB_TAB_REQUIRED',retryAt:'2026-11-10T13:16:00Z',batches:[{runId:batch}],currentRunId:batch,currentSource:{rank:44,productId:'7',productName:'jacket'}}));
+ fs.writeFileSync(path.join(root,batch,'batch-state.json'),JSON.stringify({status:'complete',results:[{productId:'123',status:'complete',assessment:{decision:'adopt',reviewId:'review-1',reason:'validated'},qualification:{passed:true}}]}));
+ const data=liveDashboardData(root,id);assert.equal(data.status,'offline');assert.equal(data.workerAlive,false);assert.equal(data.checked,368);assert.equal(data.qualified,1);assert.equal(data.reviewed,1);assert.equal(data.recent[0].qualified,true);assert.equal(data.featured.productId,'123');assert.equal(data.waitReason,'NO1_WEB_TAB_REQUIRED');
+ const app=createDashboardServer({root,workId:id,port:0});const address=await app.listen();try{const response=await fetch(`http://127.0.0.1:${address.port}/api/state`);assert.equal(response.status,200);assert.equal((await response.json()).checked,368);const page=await fetch(`http://127.0.0.1:${address.port}/`);assert.match(await page.text(),/수익 상품 탐색 현황/);assert.equal((await fetch(`http://127.0.0.1:${address.port}/missing`)).status,404);}finally{app.server.close();}
+});

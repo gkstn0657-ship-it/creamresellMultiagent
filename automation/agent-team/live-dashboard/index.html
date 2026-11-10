@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cream 탐색 라이브</title>
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><span>CREAM<span class="brand-light"> / LIVE DESK</span></span></div>
+      <div class="top-right"><span class="clock" id="clock">--:--:--</span><span class="connection" id="connection"><span class="connection-dot"></span>기록 연결 중</span></div>
+    </header>
+
+    <main>
+      <section class="intro">
+        <div><p class="eyebrow">MUSINSA RANKING · REAL-TIME MONITOR</p><h1>수익 상품 탐색 현황<span class="title-spark">✦</span></h1><p class="lead">인기순 수집과 상품별 AI 판단, 독립 검토를 실시간 기록으로 보여줍니다.</p></div>
+        <div class="scope-chip"><span class="scope-icon">∞</span><span>멈출 때까지 계속 탐색</span></div>
+      </section>
+
+      <section class="hero-grid">
+        <article class="hero-panel" id="hero-panel" aria-live="polite">
+          <div class="hero-head"><span class="eyebrow">CURRENT ACTIVITY</span><span class="live-pill" id="live-pill"><span class="pill-dot"></span>상태 확인 중</span></div>
+          <div class="hero-inner">
+            <div class="orb-wrap" id="orb-wrap" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orb"><span class="orb-symbol" id="orb-symbol">✦</span></div><span class="orb-spark spark-a"></span><span class="orb-spark spark-b"></span><span class="orb-spark spark-c"></span></div>
+            <div class="activity-copy"><p class="activity-kicker" id="activity-kicker">작업 상태</p><h2 id="activity-title">수집 기록을 불러오는 중</h2><p class="activity-detail" id="activity-detail">잠시만 기다려 주세요.</p><div class="activity-meta" id="activity-meta"></div></div>
+          </div>
+          <div class="hero-footer"><span id="last-updated">최근 기록 확인 중</span><span id="next-retry"></span></div>
+        </article>
+
+        <div class="stat-grid">
+          <article class="stat-card accent-mint"><span class="stat-label">확인한 상품</span><div class="stat-value"><strong id="checked">—</strong><span class="stat-unit">건</span></div><span class="stat-caption">실제 처리된 무신사 상품</span><div class="stat-flare"></div></article>
+          <article class="stat-card accent-purple"><span class="stat-label">검토 통과</span><div class="stat-value"><strong id="qualified">—</strong><span class="stat-unit">개</span></div><span class="stat-caption" id="target-caption">독립 검토까지 완료</span><div class="stat-flare"></div></article>
+          <article class="stat-card accent-blue"><span class="stat-label">AI 판단 완료</span><div class="stat-value"><strong id="judged">—</strong><span class="stat-unit">건</span></div><span class="stat-caption">상품별 수익성 판단</span><div class="stat-flare"></div></article>
+          <article class="stat-card accent-orange"><span class="stat-label">독립 검토 완료</span><div class="stat-value"><strong id="reviewed">—</strong><span class="stat-unit">건</span></div><span class="stat-caption">별도 검토 AI 확인</span><div class="stat-flare"></div></article>
+        </div>
+      </section>
+
+      <section class="lower-grid">
+        <article class="surface pipeline-card">
+          <div class="section-head"><div><p class="eyebrow">PIPELINE</p><h2>지금 어디까지 왔나요?</h2></div><span class="tiny-status" id="pipeline-status">기록 확인 중</span></div>
+          <div class="pipeline">
+            <div class="stage" id="stage-source"><span class="stage-icon">01</span><div><strong>인기순 상품 수집</strong><small id="source-detail">대기 중</small></div><span class="stage-indicator"></span></div>
+            <div class="stage-link"></div>
+            <div class="stage" id="stage-owner"><span class="stage-icon">02</span><div><strong>상품별 수익성 판단 AI</strong><small id="owner-detail">판단 기록 확인 중</small></div><span class="stage-indicator"></span></div>
+            <div class="stage-link"></div>
+            <div class="stage" id="stage-reviewer"><span class="stage-icon">03</span><div><strong>독립 검토 AI</strong><small id="reviewer-detail">검토 기록 확인 중</small></div><span class="stage-indicator"></span></div>
+          </div>
+          <div class="pipeline-note" id="pipeline-note">진행 상태는 저장된 실제 작업 기록에서 읽습니다.</div>
+        </article>
+
+        <article class="surface current-card">
+          <div class="section-head"><div><p class="eyebrow">SOURCE POSITION</p><h2>탐색 위치</h2></div><span class="rank-badge" id="rank">—</span></div>
+          <div class="category-label">현재 카테고리 <strong id="category">—</strong></div>
+          <p class="product-name" id="current-product">상품 정보 확인 중</p>
+          <div class="current-bottom"><span class="mini-icon">↗</span><span id="current-id">저장된 위치에서 이어집니다</span></div>
+          <div class="current-glow"></div>
+        </article>
+      </section>
+
+      <section class="bottom-grid">
+        <article class="surface results-card"><div class="section-head"><div><p class="eyebrow">RECENT DECISIONS</p><h2>최근 AI 판단</h2></div><span class="tiny-status" id="result-count">0건</span></div><div class="results-list" id="results-list"><p class="empty">판단 결과를 불러오는 중입니다.</p></div></article>
+        <article class="surface events-card"><div class="section-head"><div><p class="eyebrow">ACTIVITY LOG</p><h2>실시간 작업 기록</h2></div><span class="event-pulse" aria-hidden="true"></span></div><div class="events-list" id="events-list"><p class="empty">기록을 불러오는 중입니다.</p></div></article>
+      </section>
+    </main>
+    <footer><span>CREAM · MUSINSA RANKING MONITOR</span><span>2초마다 기록 갱신 · No1 화면 조작 없음 · 구매 실행 없음</span></footer>
+  </div>
+</body>
+</html>
