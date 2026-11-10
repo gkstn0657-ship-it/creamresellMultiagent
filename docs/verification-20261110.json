@@ -28,5 +28,16 @@
     "judgedProducts": 10,
     "remainingProducts": 0
   },
+  "remoteConnection": {
+    "checkedAt": "2026-11-10T05:50:15.906Z",
+    "online": true,
+    "remoteRoundTripVerified": true,
+    "readOnlyToolsVerified": ["cream_connection_status", "cream_discovery_status", "cream_batch_status"],
+    "deploymentStatus": "succeeded",
+    "runtimeEnvironmentRevision": 2,
+    "audience": "owner-only",
+    "credentialStorage": "OS user-restricted local configuration and hosted secret, excluded from Git",
+    "uiDisplay": "not_observed"
+  },
   "unverified": ["actual checkout eligibility and quantity benefits", "shipping and final settlement", "upstream refresh timestamps", "29CM option stock", "Dot UI rendering"]
 }
