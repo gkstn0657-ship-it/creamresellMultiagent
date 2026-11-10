@@ -1,11 +1,12 @@
 import {relayRequest, validateCommand, projectData, safeCode, PRODUCT_COMMANDS, CONNECTOR_VERSION} from './protocol.mjs';
 import {readDisplayedTable,readSavedMarginSettings} from './schema-data.mjs';
 import {readRankingSettings} from './ranking-data.mjs';
+import {createConnectionLoop} from './connection-loop.mjs';
 const BASE = 'http://127.0.0.1:8871';
-let busy = false, nextPoll=null,connectionGeneration=0;
 
-async function localRequest(key, route, body) {
-  const res = await fetch(BASE + route, {method: body ? 'POST' : 'GET', headers: {'X-No1-Bridge-Key': key, 'X-No1-Connector-Version': CONNECTOR_VERSION, ...(body ? {'Content-Type': 'application/json'} : {})}, ...(body ? {body: JSON.stringify(body)} : {}), redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(route.startsWith('/next')?25000:5000)});
+async function localRequest(key, route, body, signal) {
+  const timeout=AbortSignal.timeout(route.startsWith('/next')?25000:5000);
+  const res = await fetch(BASE + route, {method: body ? 'POST' : 'GET', headers: {'X-No1-Bridge-Key': key, 'X-No1-Connector-Version': CONNECTOR_VERSION, ...(body ? {'Content-Type': 'application/json'} : {})}, ...(body ? {body: JSON.stringify(body)} : {}), redirect: 'error', cache: 'no-store', signal: signal?AbortSignal.any([signal,timeout]):timeout});
   if (!res.ok) throw Error('NO1_BRIDGE_UNAVAILABLE');
   return res.json();
 }
@@ -38,9 +39,10 @@ async function existingWebToken() {
   return {token:tokens.values().next().value,tabIds:authenticatedTabs};
 }
 
-async function pageSchema(cmd,payload,tabIds){
+async function pageSchema(cmd,payload,tabIds,signal){
   const values=[];
   for(const tabId of tabIds){
+    if(signal?.aborted)throw Error('NO1_RELAY_CLOSED');
     const frames=await chrome.scripting.executeScript({target:{tabId,allFrames:true},world:['market:kream:displayed-schema','musinsa:ranking:settings'].includes(cmd)?'MAIN':'ISOLATED',func:cmd==='musinsa:ranking:settings'?readRankingSettings:cmd==='market:kream:displayed-schema'?readDisplayedTable:readSavedMarginSettings,args:cmd==='market:kream:displayed-schema'?[payload.productCode]:[]});
     for(const frame of frames)if(frame.result)values.push(...(Array.isArray(frame.result)?frame.result:[frame.result]));
   }
@@ -52,66 +54,37 @@ async function pageSchema(cmd,payload,tabIds){
   return projectData(cmd,value||{available:false,reason:'MATCHING_PRICE_TABLE_NOT_OPEN'},payload);
 }
 
-async function setStatus(code) { await chrome.storage.local.set({lastStatus: code, lastCheckedAt: new Date().toISOString()}); }
-async function poll() {
-  if (busy) return;
-  clearTimeout(nextPoll);busy = true;let repeat=false,delay=0;const generation=connectionGeneration;
-  try {
-    const {enabled, bridgeKey} = await chrome.storage.local.get(['enabled', 'bridgeKey']);
-    if (!enabled || !/^[a-f0-9]{64}$/.test(bridgeKey || '')) return;
-    repeat=true;
-    const {job} = await localRequest(bridgeKey, '/next?wait=20000');
-    if(generation!==connectionGeneration)return;
-    if (!job) return;
-    let result;
-    try {
-      if (typeof job.id !== 'string' || !Number.isFinite(job.deadline) || job.deadline <= Date.now()) throw Error('NO1_BRIDGE_TIMEOUT');
+async function executeJob(job,signal){
+      const check=()=>{if(signal.aborted)throw Error('NO1_RELAY_CLOSED');if(job.deadline-Date.now()<=1000)throw Error('NO1_BRIDGE_TIMEOUT');};
+      const relay=(cmd,payload={},max=20000)=>{check();return relayRequest({cmd,payload,token,signal,timeoutMs:Math.min(max,job.deadline-Date.now()-1000)});};
+      check();
       validateCommand(job.cmd, job.payload);
       const {token,tabIds} = await existingWebToken();
+      check();
       const pageOnly=['market:margin-settings','market:kream:displayed-schema','musinsa:ranking:settings'].includes(job.cmd);
       if (!pageOnly&&PRODUCT_COMMANDS.includes(job.cmd)) {
-        const settings = await relayRequest({cmd: 'settings:get', token});
+        const settings = await relay('settings:get');
         if (settings.kreamApiBrowser !== 'electron') throw Error('NO1_BACKGROUND_MODE_REQUIRED');
         if (job.cmd.startsWith('market:kream:') || job.cmd === 'mecro:inventory:search') {
-          const state = await relayRequest({cmd: 'platform:status', payload: {platform: 'kream'}, token});
+          const state = await relay('platform:status',{platform:'kream'});
           if (state.sessions[0].status !== 'active') throw Error('NO1_PLATFORM_LOGIN_REQUIRED');
         }
         if (job.cmd === 'musinsa:product:benefit') {
-          const state = await relayRequest({cmd: 'musinsa:ranking:check-login', token});
+          const state = await relay('musinsa:ranking:check-login');
           if (!state.isLoggedIn) throw Error('NO1_PLATFORM_LOGIN_REQUIRED');
         }
       }
-      const data = pageOnly?await pageSchema(job.cmd,job.payload,tabIds):await relayRequest({cmd: job.cmd, payload: job.payload, token, timeoutMs: Math.min(['stock:check','market:kream:history:start'].includes(job.cmd) ? 95000 : 40000, Math.max(1, job.deadline - Date.now() - 1000))});
-      result = {id: job.id, ok: true, data};
-    } catch (error) { result = {id: job.id, ok: false, error: {code: safeCode(error.message)}}; }
-    await localRequest(bridgeKey, '/result', result);
-    await setStatus(result.ok ? 'VERIFIED_READ' : result.error.code);
-  } catch { delay=3000;if(generation===connectionGeneration)await setStatus('NO1_BRIDGE_UNAVAILABLE'); }
-  finally { busy = false;if(repeat&&generation===connectionGeneration)nextPoll=setTimeout(()=>void poll(),delay); }
+      check();
+      return pageOnly?await pageSchema(job.cmd,job.payload,tabIds,signal):await relay(job.cmd,job.payload,['stock:check','market:kream:history:start'].includes(job.cmd)?95000:40000);
 }
 
+const connection=createConnectionLoop({storage:chrome.storage.local,alarms:chrome.alarms,request:localRequest,execute:executeJob,safeCode});
 chrome.runtime.onMessage.addListener((message, _sender, reply) => {
   if (!['connect', 'disconnect'].includes(message?.type)) return false;
-  (async () => {
-    if (message.type === 'connect') {
-      if (!/^[a-f0-9]{64}$/.test(message.key || '')) return {ok: false, code: 'INVALID_PAIRING_CODE'};
-      try { await localRequest(message.key, '/status'); } catch { return {ok: false, code: 'NO1_BRIDGE_UNAVAILABLE'}; }
-      await chrome.storage.local.set({bridgeKey: message.key, enabled: true, lastStatus: 'CONNECTED'});
-      await chrome.alarms.create('no1-background-poll', {periodInMinutes: 0.5});
-      void poll(); return {ok: true};
-    }
-    connectionGeneration++;
-    const {bridgeKey} = await chrome.storage.local.get('bridgeKey');
-    await chrome.storage.local.set({enabled: false, lastStatus: 'DISCONNECTED'});
-    clearTimeout(nextPoll);
-    await chrome.storage.local.remove('bridgeKey');
-    await chrome.alarms.clear('no1-background-poll');
-    if (bridgeKey) await localRequest(bridgeKey, '/disconnect', {}).catch(() => {});
-    return {ok: true};
-  })().then(reply).catch(() => reply({ok: false, code: 'NO1_BRIDGE_UNAVAILABLE'}));
+  (message.type==='connect'?connection.connect(message.key):connection.disconnect()).then(reply).catch(()=>reply({ok:false,code:'NO1_BRIDGE_UNAVAILABLE'}));
   return true;
 });
-chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === 'no1-background-poll') void poll(); });
-chrome.runtime.onStartup.addListener(() => { void poll(); });
-setInterval(() => { void poll(); }, 3000);
-void poll();
+chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name==='no1-background-poll')void connection.start();});
+chrome.runtime.onStartup.addListener(()=>void connection.start());
+chrome.runtime.onInstalled?.addListener(()=>void connection.start());
+void connection.start();

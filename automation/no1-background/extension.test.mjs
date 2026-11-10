@@ -23,7 +23,7 @@ test('extension worker reads only existing No1 session and sends only projected 
       return [{result: options.func()}];
     }},
     runtime: {onMessage: {addListener: fn => { listener = fn; }}, onStartup: {addListener: () => {}}},
-    alarms: {create: async () => {}, clear: async () => {}, onAlarm: {addListener: fn => { alarmListener = fn; }}}
+    alarms: {get:async()=>null,create: async () => {}, clear: async () => {}, onAlarm: {addListener: fn => { alarmListener = fn; }}}
   };
   globalThis.fetch = async (url, options) => {
     assert.ok(url.startsWith('http://127.0.0.1:8871/')); assert.equal(options.headers['X-No1-Bridge-Key'], localKey);

@@ -2,6 +2,7 @@ import {projectHistory,projectMarginSettings,projectDisplayedSchema} from './sch
 import {validRankingRequest,projectRankingSettings,projectRankingProducts} from './ranking-data.mjs';
 export const RELAY_URL = 'wss://relay.certi.life/ws/v2';
 export const CLIENT_VERSION = '1.35.8';
+// Wire protocol version; compatible package-only fixes can have a newer manifest version.
 export const CONNECTOR_VERSION = '0.8.0';
 export const PRODUCT_COMMANDS = Object.freeze(['musinsa:ranking:settings','musinsa:ranking:products','mecro:inventory:search', 'stock:check', 'market:kream:prices', 'market:kream:details', 'market:kream:trades', 'market:kream:askPreviewBatch', 'market:kream:history:start', 'market:kream:displayed-schema', 'musinsa:product:benefit']);
 export const COMMANDS = Object.freeze(['stock:supportedSites', 'musinsa:ranking:check-login', 'settings:get', 'platform:status', 'market:margin-settings', ...PRODUCT_COMMANDS]);
@@ -138,7 +139,7 @@ export function validateProjectedData(cmd, data, payload = {}) {
 
 // Runs in the extension worker. The No1 token is sent only to the official relay.
 // It is never part of the result and must never be logged or persisted.
-export function relayRequest({cmd, payload = {}, token, Socket = WebSocket, timeoutMs = 20000, traceId = crypto.randomUUID()}) {
+export function relayRequest({cmd, payload = {}, token, Socket = WebSocket, timeoutMs = 20000, traceId = crypto.randomUUID(),signal}) {
   validateCommand(cmd, payload);
   if (typeof token !== 'string' || !token || token.length > 16384 || /\s/.test(token)) return Promise.reject(Error('NO1_AUTH_REQUIRED'));
   const url = new URL(RELAY_URL);
@@ -151,11 +152,14 @@ export function relayRequest({cmd, payload = {}, token, Socket = WebSocket, time
     const history=cmd==='market:kream:history:start';let taskId=null,lastPartial=null;const buffered=[];
     const finish = (error, value) => {
       if (settled) return;
-      settled = true; clearTimeout(timer);
+      settled = true; clearTimeout(timer);signal?.removeEventListener('abort',onAbort);
       if (socket && socket.readyState < 2) { try { socket.close(1000); } catch {} }
       if (error) reject(Error(safeCode(error))); else resolve(value);
     };
+    const onAbort=()=>finish('NO1_RELAY_CLOSED');
     const timer = setTimeout(() => lastPartial?finish(null,{...lastPartial,errorCode:'NO1_HISTORY_TIMEOUT'}):finish(history?'NO1_HISTORY_TIMEOUT':'NO1_RELAY_TIMEOUT'), timeoutMs);
+    signal?.addEventListener('abort',onAbort,{once:true});
+    if(signal?.aborted){onAbort();return;}
     const push=message=>{
       if(!history||message.type!=='PUSH'||message.v!==2||!['market:kream:history:partial','market:kream:history:final','market:kream:history:error'].includes(message.channel))return;
       const p=message.data;if(p?.productCode!==payload.productCode)return;
