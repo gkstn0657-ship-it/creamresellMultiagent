@@ -1,0 +1,31 @@
+{
+  "test": "Actual live test-only stock UI query, not fixture",
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "no1_search_stock_estimate",
+      "arguments": {
+        "productUrl": "https://www.musinsa.com/products/7481180",
+        "model": "NBNPG41033",
+        "color": "(19)BLACK",
+        "option": "L(100)"
+      }
+    }
+  },
+  "response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"dataAsOf\":null,\"previousResultCleared\":true,\"option\":\"L(100)\",\"capturedAt\":\"2026-11-09T08:30:06.2399380Z\",\"benefitConditionsVerbatim\":[\"1개 구매 기준\",\"목록·스위치로 적용/해제\",\"정상가 1개\",\"399,000원\",\"상품쿠폰\",\"-19,950원\",\"장바구니쿠폰\",\"쓸 수 있는 쿠폰 없음\",\"—\",\"등급할인\",\"-1,890원\",\"적립금\",\"적립금 사용 제외 상품\",\"—\",\"선할인\",\"선할인 사용\",\"-1,880원\",\"결제즉시할인\",\"토스페이 × 삼성카드\",\"-5,000원\",\"결제금액 1개\",\"370,280원\"],\"maximumBenefitPriceKrw\":370280,\"model\":\"NBNPG41033\",\"color\":\"(19)BLACK\",\"identityVerified\":true,\"queryStartedAt\":\"2026-11-09T08:30:02.6279191Z\",\"source\":\"No1 stock lookup UI\",\"queryCompletedAt\":\"2026-11-09T08:30:05.6006313Z\",\"productUrl\":\"https://www.musinsa.com/products/7481180\",\"stockText\":\"40개\",\"freshness\":\"new UI query completed; upstream data timestamp not displayed\",\"resultUrlVerifiedFromCopy\":true,\"stockQuantity\":40,\"maximumBenefitPriceText\":\"370,280원\",\"mode\":\"live-visible-ui\",\"priceType\":\"maximum-benefit-estimate\",\"actualCheckoutPriceConfirmed\":false,\"upstreamFreshnessConfirmed\":false,\"decision\":\"hold\",\"promotionAllowed\":false,\"missingFields\":[\"actualCheckoutPrice\",\"benefitEligibilityAtCheckout\",\"sellerIdentity\",\"shippingCost\",\"upstreamDataAsOf\"]}"
+        }
+      ],
+      "isError": false
+    }
+  },
+  "pipelineWrites": false
+}

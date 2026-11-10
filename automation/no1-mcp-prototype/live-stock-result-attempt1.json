@@ -1,0 +1,31 @@
+{
+  "test": "Actual live test-only stock UI query, not fixture",
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "no1_search_stock_estimate",
+      "arguments": {
+        "productUrl": "https://www.musinsa.com/products/7481180",
+        "model": "NBNPG41033",
+        "color": "(19)BLACK",
+        "option": "L(100)"
+      }
+    }
+  },
+  "response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "INVOKE_UNAVAILABLE"
+        }
+      ],
+      "isError": true
+    }
+  },
+  "pipelineWrites": false
+}

@@ -1,0 +1,10 @@
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {readJson} from '../renew/Cream/kream-tools/agents-core.mjs';
+import {RelayTransport} from './relay-transport.mjs';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const config=readJson(root,'sourcing-runtime.json',{});
+if(!config.relayRunDir)throw Error('Run Setup-Other-PC.ps1 first');
+const dir=path.resolve(root,config.relayRunDir);
+await new RelayTransport(dir,dir).verify();
+console.log(JSON.stringify({relayRunDir:dir,connected:true}));

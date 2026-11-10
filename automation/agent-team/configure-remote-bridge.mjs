@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {execFileSync} from 'node:child_process';
+if(process.stdin.isTTY)process.stdin.setRawMode(true);
+process.stdin.resume();console.log('Ready for private bridge configuration (input hidden).');
+const line=await new Promise(resolve=>{let input='';process.stdin.on('data',chunk=>{input+=chunk.toString();if(input.includes('\n')||input.includes('\r')){process.stdin.pause();resolve(input.trim());}});});
+if(process.stdin.isTTY)process.stdin.setRawMode(false);
+const config=JSON.parse(line);
+if(!/^https:\/\/[a-z0-9.-]+\.chatgpt\.site$/.test(config.origin)||!config.serviceToken||!/^[a-f0-9]{64}$/.test(config.bridgeKey))throw Error('INVALID_CONFIG');
+const dir=path.join(process.env.LOCALAPPDATA,'CreamDotBridge');fs.mkdirSync(dir,{recursive:true});
+const identity=execFileSync('whoami.exe',[],{encoding:'utf8',windowsHide:true}).trim();
+execFileSync('icacls.exe',[dir,'/inheritance:r','/grant:r',identity+':(OI)(CI)F'],{windowsHide:true,stdio:'pipe'});
+fs.writeFileSync(path.join(dir,'connection.json'),JSON.stringify(config),{mode:0o600});
+console.log(JSON.stringify({configured:true,credentialsPrinted:false}));

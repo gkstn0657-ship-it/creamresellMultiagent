@@ -1,0 +1,12 @@
+{
+  "objective": "이 상품의 동일 옵션을 검토하고 쿠폰·마일리지·수요·비용을 근거로 조사 후보 채택, 보류 또는 제외를 AI가 결정한다. 필요한 추가 조사는 스스로 선택한다.",
+  "product": {
+    "kreamId": "1120286",
+    "productUrl": "https://www.musinsa.com/products/7481180",
+    "model": "NBNPG41033",
+    "color": "(19)BLACK",
+    "option": "L(100)"
+  },
+  "constraints": {"backgroundOnly": true, "purchases": false, "missingIsNotZero": true},
+  "completion": "독립 검증과 근거가 연결된 AI 판단. 정보가 부족하면 미확인 항목과 재검토 조건을 명시한다."
+}

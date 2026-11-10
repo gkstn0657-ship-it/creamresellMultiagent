@@ -1,0 +1,87 @@
+{
+  "test": "Actual MCP search UI transition 280933 -> 756827 and wrong-ID blocking; not fixture",
+  "capturedAt": "2026-11-09T08:10:31.233Z",
+  "precondition": {
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/call",
+      "params": {
+        "name": "no1_search_price_comparison",
+        "arguments": {
+          "kreamId": "280933",
+          "model": "MM00313KM0307-P199"
+        }
+      }
+    },
+    "response": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "SEARCH_INPUT_MISMATCH"
+          }
+        ],
+        "isError": true
+      }
+    }
+  },
+  "alternate": {
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/call",
+      "params": {
+        "name": "no1_search_price_comparison",
+        "arguments": {
+          "kreamId": "756827",
+          "model": "RCCMSS713A005086W103"
+        }
+      }
+    },
+    "response": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"source\":\"No1 visible UI Automation price table\",\"capturedAt\":\"2026-11-09T08:10:30.5939346Z\",\"sizes\":[{\"estimatedTrades30d\":0,\"instantBidKrw\":260000,\"size\":\"XS\"},{\"estimatedTrades30d\":7,\"instantBidKrw\":240000,\"size\":\"S\"},{\"estimatedTrades30d\":11,\"instantBidKrw\":234000,\"size\":\"M\"},{\"estimatedTrades30d\":21,\"instantBidKrw\":244000,\"size\":\"L\"},{\"estimatedTrades30d\":10,\"instantBidKrw\":213000,\"size\":\"XL\"},{\"estimatedTrades30d\":3,\"instantBidKrw\":82000,\"size\":\"XXL\"},{\"estimatedTrades30d\":1,\"instantBidKrw\":null,\"size\":\"XXXL\"}],\"volumeLabel\":\"30일 예상 거래량\",\"identityVerifiedFromVisibleLink\":true,\"searchPerformed\":true,\"kreamId\":\"756827\",\"searchStartedAt\":\"2026-11-09T08:10:29.8251962Z\",\"model\":\"RCCMSS713A005086W103\",\"uiAsOfLabel\":\"30일 거래량 새로고침 오늘 16:25기준 최신\",\"mode\":\"live-visible-ui\",\"dataAsOf\":\"2026-11-09T07:25:00.000Z\",\"dataAsOfTimezone\":\"Asia/Seoul\",\"dataAsOfDateBasis\":\"Today label interpreted using capture date in Asia/Seoul\",\"freshEvidence\":false,\"freshnessReason\":\"NO1_STALE\",\"decision\":\"hold\",\"sourceStockConfirmed\":false,\"sourceCheckoutCostConfirmed\":false,\"inventoryComparisonUsed\":false,\"promotionAllowed\":false}"
+          }
+        ],
+        "isError": false
+      }
+    }
+  },
+  "mismatch": {
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/call",
+      "params": {
+        "name": "no1_search_price_comparison",
+        "arguments": {
+          "kreamId": "280933",
+          "model": "RCCMSS713A005086W103"
+        }
+      }
+    },
+    "response": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "SEARCH_INPUT_MISMATCH"
+          }
+        ],
+        "isError": true
+      }
+    }
+  },
+  "passed": false,
+  "automaticObservationsWritten": false
+}

@@ -1,0 +1,195 @@
+{
+  "name": "Agent Cream | KREAM 리셀 후보 파일럿",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "수동 실행",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-760, -100]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "매일 09:00 KST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-760, 100]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "run-id",
+              "name": "run_id",
+              "value": "={{ $now.setZone('Asia/Seoul').toFormat('yyyyLLdd-HHmmss') }}",
+              "type": "string"
+            },
+            {
+              "id": "project-root",
+              "name": "project_root",
+              "value": "C:\\Users\\HansuPark\\Desktop\\Cream",
+              "type": "string"
+            },
+            {
+              "id": "pilot-scope",
+              "name": "scope",
+              "value": "국내 신발 / 경로 A+B / 후보 최대 50 / 주문·입찰 없음",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "run-context",
+      "name": "실행 컨텍스트",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-500, 0]
+    },
+    {
+      "parameters": {
+        "command": "=cd /d \"{{ $json.project_root }}\" && \"C:\\ProgramData\\Anaconda3\\python.exe\" \"{{ $json.project_root }}\\pilot.py\"",
+        "options": {}
+      },
+      "id": "execute-pilot",
+      "name": "파일럿 CLI 실행",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [-240, 0],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first().json;\nconst stdout = String(row.stdout ?? '').trim();\nconst stderr = String(row.stderr ?? '').trim();\nconst exitCode = Number(row.exitCode ?? (row.error ? 1 : 0));\nconst match = stdout.match(/(.*?\\.xlsx)\\s+(\\d+)\\s+(\\d+)\\s*$/s);\nreturn [{ json: {\n  status: exitCode === 0 && match ? 'SUCCESS' : 'FAILED',\n  exit_code: exitCode,\n  output_xlsx: match ? match[1].trim() : '',\n  target_count: match ? Number(match[2]) : 0,\n  observation_count: match ? Number(match[3]) : 0,\n  stderr: stderr.slice(0, 2000),\n  stdout: stdout.slice(0, 4000),\n  finished_at_kst: $now.setZone('Asia/Seoul').toISO(),\n  next_action: exitCode === 0 && match\n    ? '엑셀의 후보/관찰·보류/근거·실행 시트를 운영자가 검토'\n    : '실패 원인을 확인하고 기존 관측값은 갱신하지 않은 채 재실행'\n} }];"
+      },
+      "id": "normalize-result",
+      "name": "실행 결과 정규화",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [20, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "success-condition",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "SUCCESS",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "success-check",
+      "name": "실행 성공?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [280, 0]
+    },
+    {
+      "parameters": {},
+      "id": "success-end",
+      "name": "검토용 엑셀 생성 완료",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [540, -100]
+    },
+    {
+      "parameters": {},
+      "id": "failure-end",
+      "name": "실패 기록 · 재실행 대기",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [540, 100]
+    },
+    {
+      "parameters": {
+        "content": "## Agent Cream 파일럿\n- 범위: 국내 신발, A/B 탐색 공통 판정\n- 산출물: 매입 검토용 Excel\n- 금지: 자동 주문·입찰·외부 메시지\n- KREAM/네이버 자동 수집은 권한과 데이터 범위 확인 전 미구현\n- 옵션 동일성·재고·비용이 불명확하면 보류",
+        "height": 270,
+        "width": 430,
+        "color": 5
+      },
+      "id": "scope-note",
+      "name": "설계 범위",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-780, -430]
+    },
+    {
+      "parameters": {
+        "content": "## 운영 전 확인\n1. 워크플로 시간대를 Asia/Seoul로 설정\n2. self-hosted n8n에서만 Execute Command 사용\n3. n8n 실행 계정이 프로젝트/outputs 폴더에 접근 가능한지 확인\n4. 1회 수동 실행 후 Excel 3개 시트와 검산 예시 확인\n5. 검증 전에는 비활성 상태 유지",
+        "height": 260,
+        "width": 430,
+        "color": 3
+      },
+      "id": "ops-note",
+      "name": "운영 체크리스트",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [220, -430]
+    }
+  ],
+  "connections": {
+    "수동 실행": {
+      "main": [[{"node": "실행 컨텍스트", "type": "main", "index": 0}]]
+    },
+    "매일 09:00 KST": {
+      "main": [[{"node": "실행 컨텍스트", "type": "main", "index": 0}]]
+    },
+    "실행 컨텍스트": {
+      "main": [[{"node": "파일럿 CLI 실행", "type": "main", "index": 0}]]
+    },
+    "파일럿 CLI 실행": {
+      "main": [[{"node": "실행 결과 정규화", "type": "main", "index": 0}]]
+    },
+    "실행 결과 정규화": {
+      "main": [[{"node": "실행 성공?", "type": "main", "index": 0}]]
+    },
+    "실행 성공?": {
+      "main": [
+        [{"node": "검토용 엑셀 생성 완료", "type": "main", "index": 0}],
+        [{"node": "실패 기록 · 재실행 대기", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Seoul",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "active": false,
+  "versionId": "90cbfa39-0a02-4ec3-907f-4b931d8d9431",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "test": "Same-product sequential market and stock UI tools in one MCP server; not fixture",
+  "recordedAt": "2026-11-09T08:39:44.183Z",
+  "identityMapping": {
+    "kreamId": "1120286",
+    "kreamUrl": "https://kream.co.kr/products/1120286",
+    "kreamModel": "NBNPG41033-19",
+    "kreamColor": "블랙",
+    "kreamOption": "L",
+    "sellerUrl": "https://www.musinsa.com/products/7481180",
+    "sellerModel": "NBNPG41033",
+    "sellerColor": "(19)BLACK",
+    "sellerOption": "L(100)",
+    "brand": "New Balance",
+    "basis": "No1 market result shows NBNPG41033-19 and Flying77 hooded heavy goose down Black; stock result shows NBNPG41033 Flying77 hooded heavy goose down (4 colors) with explicit (19)BLACK and L(100). Product-specific color suffix and option-label mapping; not exact string equality or a generic normalization rule.",
+    "limitations": [
+      "KREAM L versus seller L(100) labels retained separately; no garment measurements verified",
+      "No stock comparison table reused",
+      "No profit or margin calculated"
+    ]
+  },
+  "requests": [
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/call",
+      "params": {
+        "name": "no1_search_price_comparison",
+        "arguments": {
+          "kreamId": "1120286",
+          "model": "NBNPG41033-19"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "tools/call",
+      "params": {
+        "name": "no1_search_stock_estimate",
+        "arguments": {
+          "productUrl": "https://www.musinsa.com/products/7481180",
+          "model": "NBNPG41033",
+          "color": "(19)BLACK",
+          "option": "L(100)"
+        }
+      }
+    }
+  ],
+  "responses": [
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"source\":\"No1 visible UI Automation price table\",\"capturedAt\":\"2026-11-09T08:39:39.5170054Z\",\"sizes\":[{\"estimatedTrades30d\":0,\"instantBidKrw\":null,\"size\":\"XS\"},{\"estimatedTrades30d\":0,\"instantBidKrw\":null,\"size\":\"S\"},{\"estimatedTrades30d\":1,\"instantBidKrw\":null,\"size\":\"M\"},{\"estimatedTrades30d\":0,\"instantBidKrw\":200000,\"size\":\"L\"},{\"estimatedTrades30d\":1,\"instantBidKrw\":160000,\"size\":\"XL\"},{\"estimatedTrades30d\":0,\"instantBidKrw\":null,\"size\":\"XXL\"}],\"volumeLabel\":\"30일 예상 거래량\",\"identityVerifiedFromVisibleLink\":true,\"searchPerformed\":true,\"kreamId\":\"1120286\",\"searchStartedAt\":\"2026-11-09T08:39:36.7647363Z\",\"model\":\"NBNPG41033-19\",\"uiAsOfLabel\":\"30일 거래량 새로고침 오늘 13:44기준 최신\",\"navigation\":{\"changed\":false,\"from\":\"price-comparison\",\"to\":\"price-comparison\",\"verified\":true},\"mode\":\"live-visible-ui\",\"dataAsOf\":\"2026-11-09T04:44:00.000Z\",\"dataAsOfTimezone\":\"Asia/Seoul\",\"dataAsOfDateBasis\":\"Today label interpreted using capture date in Asia/Seoul\",\"freshEvidence\":false,\"freshnessReason\":\"NO1_STALE\",\"manualPurchasePriceUsed\":false,\"no1DisplayedMarginUsed\":false,\"decision\":\"hold\",\"sourceStockConfirmed\":false,\"sourceCheckoutCostConfirmed\":false,\"inventoryComparisonUsed\":false,\"promotionAllowed\":false}"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"dataAsOf\":null,\"previousResultCleared\":true,\"option\":\"L(100)\",\"capturedAt\":\"2026-11-09T08:39:44.1507987Z\",\"resultUrlVerifiedFromCopy\":true,\"benefitConditionsVerbatim\":[\"1개 구매 기준\",\"목록·스위치로 적용/해제\",\"정상가 1개\",\"399,000원\",\"상품쿠폰\",\"-19,950원\",\"장바구니쿠폰\",\"쓸 수 있는 쿠폰 없음\",\"—\",\"등급할인\",\"-1,890원\",\"적립금\",\"적립금 사용 제외 상품\",\"—\",\"선할인\",\"선할인 사용\",\"-1,880원\",\"결제즉시할인\",\"토스페이 × 삼성카드\",\"-5,000원\",\"결제금액 1개\",\"370,280원\"],\"maximumBenefitPriceKrw\":370280,\"model\":\"NBNPG41033\",\"color\":\"(19)BLACK\",\"identityVerified\":true,\"queryStartedAt\":\"2026-11-09T08:39:40.8140526Z\",\"source\":\"No1 stock lookup UI\",\"queryCompletedAt\":\"2026-11-09T08:39:43.5557966Z\",\"productUrl\":\"https://www.musinsa.com/products/7481180\",\"stockText\":\"40개\",\"freshness\":\"new UI query completed; upstream data timestamp not displayed\",\"navigation\":{\"changed\":true,\"from\":\"price-comparison\",\"to\":\"stock-check\",\"verified\":true},\"stockQuantity\":40,\"maximumBenefitPriceText\":\"370,280원\",\"mode\":\"live-visible-ui\",\"priceType\":\"maximum-benefit-estimate\",\"actualCheckoutPriceConfirmed\":false,\"upstreamFreshnessConfirmed\":false,\"manualPurchasePriceUsed\":false,\"no1DisplayedMarginUsed\":false,\"decision\":\"hold\",\"promotionAllowed\":false,\"missingFields\":[\"actualCheckoutPrice\",\"benefitEligibilityAtCheckout\",\"sellerIdentity\",\"shippingCost\",\"upstreamDataAsOf\"]}"
+          }
+        ],
+        "isError": false
+      }
+    }
+  ],
+  "passed": true,
+  "decision": "hold",
+  "marginCalculated": false,
+  "pipelineWrites": false
+}

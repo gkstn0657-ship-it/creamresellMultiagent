@@ -1,0 +1,35 @@
+# Dependencies and local configuration
+node_modules/
+.venv/
+.env
+.env.*
+!.env.example
+
+# Machine-local runtime state and logs
+*.log
+*.lock
+*.pid
+*.heartbeat
+process.json
+
+# Generated run data, source dumps, reports, and legacy backups
+kream-runs/
+outputs/
+runs/
+renew/
+*.xlsx
+*.zip
+*.tar.gz
+
+# Build/cache artifacts
+dist/
+__pycache__/
+*.py[cod]
+
+# Local tool state
+bookmarks*.html
+chrome-activity-log.md
+TRANSFER-MANIFEST.json
+sourcing-runtime.json
+.DS_Store
+Thumbs.db

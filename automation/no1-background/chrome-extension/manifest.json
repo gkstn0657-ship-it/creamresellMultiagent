@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "No1 Background Connector",
+  "version": "0.5.0",
+  "minimum_chrome_version": "120",
+  "description": "기존 No1 웹 로그인으로 조회 결과만 로컬 MCP에 전달합니다. 탭이나 창을 열지 않습니다.",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://no1.certi.life/sourcing/*",
+    "https://onebox.team/sourcing/*",
+    "https://relay.certi.life/*",
+    "http://127.0.0.1:8871/*"
+  ],
+  "background": {
+    "service_worker": "background.mjs",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "No1 백그라운드 연결",
+    "default_popup": "popup.html"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src http://127.0.0.1:8871 https://relay.certi.life wss://relay.certi.life"
+  }
+}

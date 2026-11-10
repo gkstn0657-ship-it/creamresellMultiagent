@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {DiscoveryStore} from './discovery-store.mjs';
+import {createDiscoveryFeed} from './discovery-feed.mjs';
+import {startWork,scopeStatus} from './work-orders.mjs';
+import {runExploration} from './exploration.mjs';
+const root=fileURLToPath(new URL('../../kream-runs/discovery-verification/',import.meta.url));fs.mkdirSync(root,{recursive:true});
+const feed=createDiscoveryFeed(),first=await feed('1');
+const store=new DiscoveryStore(path.join(root,'discovery'));store.appendPage(first);store.close();
+const work=startWork(root,{targetProducts:1,userInstruction:'Isolated implementation verification: explore one real product, without purchasing; do not create production work.',requestId:'discovery-live-verification-v1'});
+const result=await runExploration({root,workId:work.workId,feed,onEvent:e=>{if(['all_products_collected','product_judgment_started','product_judged'].includes(e.type))console.log(JSON.stringify(e));}});
+const verification={verifiedAt:new Date().toISOString(),runtimeDiscoveryAI:false,reusedExistingWork:Boolean(work.reused),newBatchesThisVerification:result.batches.length,feed:{count:first.items.length,nextCursor:first.nextCursor},status:result.status,error:result.error,work:scopeStatus(root),productionWorkCreated:false};
+fs.writeFileSync(path.join(root,'verification.json'),JSON.stringify(verification,null,2));console.log(JSON.stringify({status:result.status,error:result.error,feedCount:first.items.length}));
+if(result.status!=='complete')process.exitCode=2;

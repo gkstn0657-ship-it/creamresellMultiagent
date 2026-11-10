@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+import {spawnSync} from 'node:child_process';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url));
+const input=JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'no1_read_price_comparison',arguments:{kreamId:'280933',model:'MM00313KM0307-P199'}}})+'\n';
+const r=spawnSync(process.execPath,[path.join(here,'server.mjs'),'--enable-live-ui'],{input,encoding:'utf8',windowsHide:true,timeout:25000});
+if(r.status!==0)throw Error('MCP process failed');const response=JSON.parse(r.stdout.trim());if(response.result?.isError)throw Error(response.result.content[0].text);const observed=JSON.parse(response.result.content[0].text);if(observed.mode!=='live-visible-ui')throw Error('Not live');
+const records=JSON.parse(fs.readFileSync(path.join(here,'../../kream-runs/automation/2026-11-09-cycle-02/no1-ui-checks.json'),'utf8'));
+const prior=records.items.find(x=>x.kreamId==='280933');if(!prior)throw Error('Reference missing');const compared=observed.sizes.map(x=>{const y=prior.sizes.find(y=>y.size===x.size);return {size:x.size,sameVolume:x.estimatedTrades30d===y?.estimatedTrades30d,sameInstantBid:x.instantBidKrw===y?.instantBidKrw}});
+const output={test:'actual live UI read via MCP, not fixture',observed,reference:'cycle-02/no1-ui-checks.json item 280933',compared,allValuesMatch:compared.every(x=>x.sameVolume&&x.sameInstantBid),note:'Observed UI values may be cached. No data refresh or pipeline writes were performed.'};
+fs.writeFileSync(path.join(here,'live-280933-result-v2.json'),JSON.stringify(output,null,2)+'\n');console.log(JSON.stringify(output));

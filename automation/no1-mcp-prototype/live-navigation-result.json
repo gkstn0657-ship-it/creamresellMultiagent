@@ -1,0 +1,89 @@
+{
+  "test": "Actual bidirectional UI menu navigation with market and stock identity checks",
+  "recordedAt": "2026-11-09T08:33:32.579Z",
+  "market": {
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/call",
+      "params": {
+        "name": "no1_search_price_comparison",
+        "arguments": {
+          "kreamId": "280933",
+          "model": "MM00313KM0307-P199"
+        }
+      }
+    },
+    "response": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"source\":\"No1 visible UI Automation price table\",\"capturedAt\":\"2026-11-09T08:33:23.4770711Z\",\"sizes\":[{\"estimatedTrades30d\":1,\"instantBidKrw\":100000,\"size\":\"XS\"},{\"estimatedTrades30d\":3,\"instantBidKrw\":109000,\"size\":\"S\"},{\"estimatedTrades30d\":26,\"instantBidKrw\":118000,\"size\":\"M\"},{\"estimatedTrades30d\":27,\"instantBidKrw\":112000,\"size\":\"L\"},{\"estimatedTrades30d\":25,\"instantBidKrw\":110000,\"size\":\"XL\"},{\"estimatedTrades30d\":3,\"instantBidKrw\":111000,\"size\":\"XXL\"}],\"volumeLabel\":\"30일 예상 거래량\",\"identityVerifiedFromVisibleLink\":true,\"searchPerformed\":true,\"kreamId\":\"280933\",\"searchStartedAt\":\"2026-11-09T08:33:18.1270067Z\",\"model\":\"MM00313KM0307-P199\",\"uiAsOfLabel\":\"30일 거래량 새로고침 오늘 16:47기준 최신\",\"navigation\":{\"changed\":true,\"from\":\"stock-check\",\"to\":\"price-comparison\",\"verified\":true},\"mode\":\"live-visible-ui\",\"dataAsOf\":\"2026-11-09T07:47:00.000Z\",\"dataAsOfTimezone\":\"Asia/Seoul\",\"dataAsOfDateBasis\":\"Today label interpreted using capture date in Asia/Seoul\",\"freshEvidence\":false,\"freshnessReason\":\"NO1_STALE\",\"manualPurchasePriceUsed\":false,\"no1DisplayedMarginUsed\":false,\"decision\":\"hold\",\"sourceStockConfirmed\":false,\"sourceCheckoutCostConfirmed\":false,\"inventoryComparisonUsed\":false,\"promotionAllowed\":false}"
+          }
+        ],
+        "isError": false
+      }
+    }
+  },
+  "stock": {
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/call",
+      "params": {
+        "name": "no1_search_stock_estimate",
+        "arguments": {
+          "productUrl": "https://www.musinsa.com/products/7481180",
+          "model": "NBNPG41033",
+          "color": "(19)BLACK",
+          "option": "L(100)"
+        }
+      }
+    },
+    "response": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"dataAsOf\":null,\"previousResultCleared\":true,\"option\":\"L(100)\",\"capturedAt\":\"2026-11-09T08:33:28.4009391Z\",\"resultUrlVerifiedFromCopy\":true,\"benefitConditionsVerbatim\":[\"1개 구매 기준\",\"목록·스위치로 적용/해제\",\"정상가 1개\",\"399,000원\",\"상품쿠폰\",\"-19,950원\",\"장바구니쿠폰\",\"쓸 수 있는 쿠폰 없음\",\"—\",\"등급할인\",\"-1,890원\",\"적립금\",\"적립금 사용 제외 상품\",\"—\",\"선할인\",\"선할인 사용\",\"-1,880원\",\"결제즉시할인\",\"토스페이 × 삼성카드\",\"-5,000원\",\"결제금액 1개\",\"370,280원\"],\"maximumBenefitPriceKrw\":370280,\"model\":\"NBNPG41033\",\"color\":\"(19)BLACK\",\"identityVerified\":true,\"queryStartedAt\":\"2026-11-09T08:33:24.9925961Z\",\"source\":\"No1 stock lookup UI\",\"queryCompletedAt\":\"2026-11-09T08:33:27.7220770Z\",\"productUrl\":\"https://www.musinsa.com/products/7481180\",\"stockText\":\"40개\",\"freshness\":\"new UI query completed; upstream data timestamp not displayed\",\"navigation\":{\"changed\":true,\"from\":\"price-comparison\",\"to\":\"stock-check\",\"verified\":true},\"stockQuantity\":40,\"maximumBenefitPriceText\":\"370,280원\",\"mode\":\"live-visible-ui\",\"priceType\":\"maximum-benefit-estimate\",\"actualCheckoutPriceConfirmed\":false,\"upstreamFreshnessConfirmed\":false,\"manualPurchasePriceUsed\":false,\"no1DisplayedMarginUsed\":false,\"decision\":\"hold\",\"promotionAllowed\":false,\"missingFields\":[\"actualCheckoutPrice\",\"benefitEligibilityAtCheckout\",\"sellerIdentity\",\"shippingCost\",\"upstreamDataAsOf\"]}"
+          }
+        ],
+        "isError": false
+      }
+    }
+  },
+  "marketBack": {
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/call",
+      "params": {
+        "name": "no1_search_price_comparison",
+        "arguments": {
+          "kreamId": "280933",
+          "model": "MM00313KM0307-P199"
+        }
+      }
+    },
+    "response": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"source\":\"No1 visible UI Automation price table\",\"capturedAt\":\"2026-11-09T08:33:32.5291070Z\",\"sizes\":[{\"estimatedTrades30d\":1,\"instantBidKrw\":100000,\"size\":\"XS\"},{\"estimatedTrades30d\":3,\"instantBidKrw\":109000,\"size\":\"S\"},{\"estimatedTrades30d\":26,\"instantBidKrw\":118000,\"size\":\"M\"},{\"estimatedTrades30d\":27,\"instantBidKrw\":112000,\"size\":\"L\"},{\"estimatedTrades30d\":25,\"instantBidKrw\":110000,\"size\":\"XL\"},{\"estimatedTrades30d\":3,\"instantBidKrw\":111000,\"size\":\"XXL\"}],\"volumeLabel\":\"30일 예상 거래량\",\"identityVerifiedFromVisibleLink\":true,\"searchPerformed\":true,\"kreamId\":\"280933\",\"searchStartedAt\":\"2026-11-09T08:33:29.5628620Z\",\"model\":\"MM00313KM0307-P199\",\"uiAsOfLabel\":\"30일 거래량 새로고침 오늘 16:47기준 최신\",\"navigation\":{\"changed\":true,\"from\":\"stock-check\",\"to\":\"price-comparison\",\"verified\":true},\"mode\":\"live-visible-ui\",\"dataAsOf\":\"2026-11-09T07:47:00.000Z\",\"dataAsOfTimezone\":\"Asia/Seoul\",\"dataAsOfDateBasis\":\"Today label interpreted using capture date in Asia/Seoul\",\"freshEvidence\":false,\"freshnessReason\":\"NO1_STALE\",\"manualPurchasePriceUsed\":false,\"no1DisplayedMarginUsed\":false,\"decision\":\"hold\",\"sourceStockConfirmed\":false,\"sourceCheckoutCostConfirmed\":false,\"inventoryComparisonUsed\":false,\"promotionAllowed\":false}"
+          }
+        ],
+        "isError": false
+      }
+    }
+  },
+  "passed": true,
+  "pipelineWrites": false
+}

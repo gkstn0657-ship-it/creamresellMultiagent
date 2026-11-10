@@ -1,0 +1,16 @@
+{
+  "version": "cream-agentic-v1",
+  "maxAgentCalls": 48,
+  "maxToolActions": 80,
+  "maxRecoveries": 8,
+  "maxSameActionRetries": 2,
+  "maxNoProgressTurns": 6,
+  "agentTimeoutMs": 120000,
+  "pageTimeoutMs": 120000,
+  "maxPagesPerRun": 60,
+  "maxNo1Queries": 20,
+  "freshnessMinutes": 10,
+  "targetCount": 5,
+  "intervalMinutes": 1440,
+  "modelsSource": "https://learn.chatgpt.com/docs/models?surface=cli"
+}

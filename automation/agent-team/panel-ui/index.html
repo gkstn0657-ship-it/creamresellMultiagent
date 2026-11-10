@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Cream · 상품 관리</title><style>/* STYLES */</style></head>
+<body>
+<main>
+  <header><div><span class="eyebrow">CREAM / AGENT OPERATIONS</span><h1>상품 관리</h1><p>정보를 모으고, 상품마다 AI가 판단합니다.</p></div><span id="connection" class="connection">호스트 연결 중</span></header>
+  <div class="toolbar"><label class="run-picker">작업 <select id="runs" aria-label="작업 선택"></select></label><button id="refresh">새로고침</button><button id="new-run" class="primary">새 탐색</button></div>
+  <div id="notice" role="status" aria-live="polite" hidden></div>
+  <section id="create" class="box" hidden><div class="section-title"><h2>탐색할 상품</h2><button id="close-create" class="quiet">닫기</button></div><p class="muted">모든 상품 정보를 취합한 다음, 상품별 판단을 시작합니다.</p>
+    <form id="start-form"><div id="seed-rows"></div><div class="actions"><button type="button" id="add-seed">상품 추가</button><label>동시 판단 <select id="concurrency"><option>1</option><option selected>2</option><option>3</option></select></label><button type="submit" class="primary">탐색 시작</button></div></form>
+  </section>
+  <section id="summary" class="stats" aria-label="작업 요약"></section>
+  <section class="box workflow"><div class="section-title"><h2 id="run-state">작업을 불러오는 중</h2><div class="actions"><button id="stop" disabled>중단</button><button id="resume" disabled>재개</button></div></div><div id="progress"></div><p id="run-info" class="muted"></p></section>
+  <div class="workspace">
+    <section class="box products"><div class="section-title"><h2>상품별 판단</h2><select id="filter" aria-label="판단 필터"><option value="all">전체</option><option value="adopt">채택</option><option value="hold">보류</option><option value="exclude">제외</option><option value="pending">판단 대기</option></select></div><div id="products"></div></section>
+    <section id="detail" class="box detail" aria-label="상품 상세"><div class="empty">상품을 선택하면 판단 근거가 표시됩니다.</div></section>
+  </div>
+  <section class="box"><div class="section-title"><h2>실행 중인 에이전트에 지시</h2><span id="steer-target" class="muted">현재 작업 전체</span></div><form id="steer-form"><label class="sr-only" for="instruction">추가 지시</label><textarea id="instruction" maxlength="12000" placeholder="예: 이 상품의 쿠폰 적용 조건을 더 확인해줘." rows="2" required></textarea><div class="actions"><button id="steer" type="submit" disabled>지시 전달</button><button id="ask-dot" type="button" class="quiet" disabled>대화에서 검토 요청</button></div></form></section>
+  <footer>채택·보류·제외는 상품 담당 AI의 의견입니다. 계산의 가정과 미확인 항목을 함께 확인하세요.<br>No1 백그라운드 처리 · 화면 조회는 AI를 호출하지 않습니다.</footer>
+</main><script type="module">/* SCRIPT */</script></body></html>

@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-11-09T15:33:43.534Z",
+  "scope": "public-network-only",
+  "authenticated": false,
+  "commandsSent": 0,
+  "uiOperated": false,
+  "publicConfig": {
+    "status": 200,
+    "relay": "wss://relay.certi.life/ws/v2"
+  },
+  "unauthenticatedSocket": {
+    "result": "handshake-opened-no-commands",
+    "code": 4001,
+    "opened": true
+  },
+  "authenticatedProductLookup": {
+    "verified": false,
+    "reason": "Background MCP transport and authenticated session are not configured; no-popup behavior remains unverified."
+  }
+}

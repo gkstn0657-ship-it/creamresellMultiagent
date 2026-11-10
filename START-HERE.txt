@@ -1,0 +1,25 @@
+Cream - 다른 Windows PC용 이전 패키지 (2026-11-10)
+
+1. ZIP을 새 빈 폴더에 압축 해제하고 그 안의 Cream 폴더를 엽니다.
+2. OTHER-PC-20261110.md를 먼저 읽습니다. 과거 README보다 우선합니다.
+3. Node v24.16.0과 Codex CLI, Chrome, No1을 준비합니다.
+4. No1 Background Connector 0.5.0을 등록하고 새 PC에서 로그인·연결합니다.
+5. Dot을 사용하려면 별도의 비공개 원격 연결 설정이 필요합니다.
+   프로젝트 ZIP에는 계정 인증과 Dot 연결 비밀 값이 없습니다.
+6. NEXT-PC-PROMPT.txt 내용을 새 PC의 Codex에 전달합니다.
+
+코드와 탐색 이력·DB·상품 결과를 함께 넣었습니다.
+이전 PC의 프로세스 PID·잠금 파일은 제외했습니다. STOP은 보존했습니다.
+탐색 DB는 SQLite backup으로 저장했으며 진행 위치와 중복 방지를 보존합니다.
+운영 탐색을 새로 시작하거나 완료 작업을 자동 재실행하지 않습니다.
+No1 창 표시·포커스 전환·UI 자동화는 금지합니다.
+
+ZIP 무결성 검사(압축을 푼 Cream에서 실행):
+python tools/pack_workspace.py --verify "옮긴 ZIP의 전체 경로"
+
+개발·회귀 검사(동일 폴더):
+node --test automation/agent-team/discovery.test.mjs automation/agent-team/prefetch.test.mjs automation/agent-team/work-orders.test.mjs automation/no1-mcp-prototype/ui-policy.test.mjs
+
+이 패키지는 설치 프로그램을 포함하지 않습니다.
+새 PC 인증·실상품 전체 실행은 대상 PC에서 검증해야 합니다.
+상품 원자료·작업 기록이 포함된 개인 이전용 파일입니다.

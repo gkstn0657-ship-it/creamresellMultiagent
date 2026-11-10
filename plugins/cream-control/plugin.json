@@ -1,0 +1,6 @@
+{
+  "name":"cream-control",
+  "version":"0.2.0",
+  "description":"상품별 Codex AI 판단을 확인하고 No1 백그라운드 탐색을 제어하는 대화 내 관리 패널.",
+  "extensions":{"com.openai":{"requires_local_executor":true,"interface":{"displayName":"Cream 상품 관리","shortDescription":"상품·에이전트·판단 근거를 한 화면에서 관리","longDescription":"모든 상품 정보 취합 후 상품별 AI 판단. 작업 시작·중단·재개·후속 지시와 쿠폰·마일리지 근거 확인. 연결된 PC의 기존 실행기를 사용합니다.","developerName":"Cream","category":"Productivity","capabilities":["Read","Write"],"brandColor":"#176e5b","defaultPrompt":["Cream 상품 관리 패널을 열어줘.","현재 상품 탐색 상태와 보류 이유를 확인해줘."]}}}
+}

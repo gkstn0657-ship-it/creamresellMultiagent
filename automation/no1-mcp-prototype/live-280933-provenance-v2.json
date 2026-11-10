@@ -1,0 +1,45 @@
+{
+  "authentication": "Existing signed-in No1 UI only; no .env, tokens, or credentials read.",
+  "arguments": {
+    "kreamId": "280933",
+    "model": "MM00313KM0307-P199"
+  },
+  "tool": "no1_read_price_comparison",
+  "recordedAt": "2026-11-09T08:04:00.2829679Z",
+  "verifiedLink": "https://kream.co.kr/products/280933",
+  "dotNativeToolRegistration": "Not registered or directly exposed in current tool catalog; invoked through connected Windows CLI only",
+  "scope": "No loop restart, original app changes, private API requests, purchases, bids, registrations, or pipeline edits.",
+  "command": "node automation/no1-mcp-prototype/test-live-280933-v2.mjs",
+  "modelSearch": "Not implemented. Current-screen read only.",
+  "linkPatternsVerified": [
+    "InvokePatternIdentifiers.Pattern",
+    "ValuePatternIdentifiers.Pattern",
+    "ScrollItemPatternIdentifiers.Pattern"
+  ],
+  "logs": "Structured stdio response and sanitized live result only; no UI tree dump or persistent server log.",
+  "uiDataAsOfLocal": "2026-11-09 16:47 KST",
+  "files": [
+    {
+      "sha256": "0EB65B7C5CCACE0134E2D45AE9001AC2851074FF8259E43CEFE982A00D6ED6C7",
+      "lastWriteTimeUtc": "2026-11-09T08:03:39.7654087Z",
+      "file": "server.mjs"
+    },
+    {
+      "sha256": "65E9F6F636A8E910C8E9EF6379CE74336E75E8684D12BE4BEC34AAA99DC34DA9",
+      "lastWriteTimeUtc": "2026-11-09T07:59:13.9104254Z",
+      "file": "read-visible-price.ps1"
+    },
+    {
+      "sha256": "EF69915C593143F244760E9DD544A7EB2085D96550A969A6622E5CAEA80453B8",
+      "lastWriteTimeUtc": "2026-11-09T08:03:39.7737783Z",
+      "file": "test-live-280933-v2.mjs"
+    },
+    {
+      "sha256": "FCD44F88385E0D79244DABEF9CD9A797801B89089828CEA9056FAA18D3CA5C64",
+      "lastWriteTimeUtc": "2026-11-09T08:03:41.3958804Z",
+      "file": "live-280933-result-v2.json"
+    }
+  ],
+  "serverCommand": "node automation/no1-mcp-prototype/server.mjs --enable-live-ui",
+  "capturedAt": "2026-11-09T08:03:41.3239092Z"
+}

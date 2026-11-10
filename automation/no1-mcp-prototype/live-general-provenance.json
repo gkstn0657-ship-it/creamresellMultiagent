@@ -1,0 +1,53 @@
+{
+  "liveTransitionAndWrongIdBlockingPassed": true,
+  "files": [
+    {
+      "file": "server-general.mjs",
+      "sha256": "8DF8D70861317AA72CCEC2861D20A2209C2FE6A44E366C4DFDBB938143D1B7DA",
+      "lastWriteTimeUtc": "2026-11-09T08:09:45.4456149Z"
+    },
+    {
+      "file": "search-visible-price.ps1",
+      "sha256": "4DA5A7157C088ACCBDBF5960E99A9358A2DF4E5739ED34CFC480A21C40D9D2C7",
+      "lastWriteTimeUtc": "2026-11-09T08:12:03.2336792Z"
+    },
+    {
+      "file": "server-general.test.mjs",
+      "sha256": "08B0C8AB11584B47FFED5FCBE3DD0C45B77D20487986410276EC980851A9C0D7",
+      "lastWriteTimeUtc": "2026-11-09T08:10:27.9781333Z"
+    },
+    {
+      "file": "test-live-general.mjs",
+      "sha256": "4E24C236777AF0D9BAC216C8C19307FC0D8880420D3277D67442A8B259CD274B",
+      "lastWriteTimeUtc": "2026-11-09T08:10:27.9781333Z"
+    },
+    {
+      "file": "live-general-search-result.json",
+      "sha256": "5B5ED79D3E0870A69AD83D87CFDF2DFC751404CE85A6EC361B260FEA162F0514",
+      "lastWriteTimeUtc": "2026-11-09T08:12:29.3638014Z"
+    },
+    {
+      "file": "server.mjs",
+      "sha256": "0EB65B7C5CCACE0134E2D45AE9001AC2851074FF8259E43CEFE982A00D6ED6C7",
+      "lastWriteTimeUtc": "2026-11-09T08:03:39.7654087Z"
+    },
+    {
+      "file": "read-visible-price.ps1",
+      "sha256": "65E9F6F636A8E910C8E9EF6379CE74336E75E8684D12BE4BEC34AAA99DC34DA9",
+      "lastWriteTimeUtc": "2026-11-09T07:59:13.9104254Z"
+    },
+    {
+      "file": "server.test.mjs",
+      "sha256": "A91D4D6C8D1DDD20CB1A44EF6BF2429F083AFFCAE225307E3999DCC8E4037B3C",
+      "lastWriteTimeUtc": "2026-11-09T08:03:39.7654087Z"
+    }
+  ],
+  "liveResult": "live-general-search-result.json",
+  "serverCommand": "node automation/no1-mcp-prototype/server-general.mjs --enable-live-ui",
+  "command": "node automation/no1-mcp-prototype/test-live-general.mjs",
+  "transport": "Windows CLI-mediated stdio MCP; not a native Dot-registered tool",
+  "unitTestsPassed": 18,
+  "recordedAt": "2026-11-09T08:12:54.8692611Z",
+  "tool": "no1_search_price_comparison",
+  "automaticObservationsWritten": false
+}

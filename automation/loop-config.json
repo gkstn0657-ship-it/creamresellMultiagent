@@ -1,0 +1,9 @@
+{
+  "engine": "dot-agent-team",
+  "scopeMode": "ask-user-per-work",
+  "dailyLimit": null,
+  "batchSize": 5,
+  "concurrency": 2,
+  "sourcesFile": "sources.json",
+  "runRoot": "../kream-runs/agent-teams"
+}

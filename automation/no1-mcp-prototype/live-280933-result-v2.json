@@ -1,0 +1,90 @@
+{
+  "test": "actual live UI read via MCP, not fixture",
+  "observed": {
+    "model": "MM00313KM0307-P199",
+    "kreamId": "280933",
+    "capturedAt": "2026-11-09T08:03:41.3239092Z",
+    "sizes": [
+      {
+        "estimatedTrades30d": 1,
+        "instantBidKrw": 100000,
+        "size": "XS"
+      },
+      {
+        "estimatedTrades30d": 3,
+        "instantBidKrw": 109000,
+        "size": "S"
+      },
+      {
+        "estimatedTrades30d": 26,
+        "instantBidKrw": 118000,
+        "size": "M"
+      },
+      {
+        "estimatedTrades30d": 27,
+        "instantBidKrw": 112000,
+        "size": "L"
+      },
+      {
+        "estimatedTrades30d": 25,
+        "instantBidKrw": 110000,
+        "size": "XL"
+      },
+      {
+        "estimatedTrades30d": 3,
+        "instantBidKrw": 111000,
+        "size": "XXL"
+      }
+    ],
+    "identityVerifiedFromVisibleLink": true,
+    "source": "No1 visible UI Automation price table",
+    "uiAsOfLabel": "30일 거래량 새로고침 오늘 16:47기준 최신",
+    "volumeLabel": "30일 예상 거래량",
+    "mode": "live-visible-ui",
+    "dataAsOf": "2026-11-09T07:47:00.000Z",
+    "dataAsOfTimezone": "Asia/Seoul",
+    "dataAsOfDateBasis": "Today label interpreted using capture date in Asia/Seoul; no midnight refresh inferred",
+    "freshEvidence": null,
+    "note": "Capture time is not data creation time. Use the UI as-of label; do not infer freshness.",
+    "decision": "hold",
+    "sourceStockConfirmed": false,
+    "sourceCheckoutCostConfirmed": false,
+    "inventoryComparisonUsed": false,
+    "promotionAllowed": false
+  },
+  "reference": "cycle-02/no1-ui-checks.json item 280933",
+  "compared": [
+    {
+      "size": "XS",
+      "sameVolume": true,
+      "sameInstantBid": true
+    },
+    {
+      "size": "S",
+      "sameVolume": true,
+      "sameInstantBid": true
+    },
+    {
+      "size": "M",
+      "sameVolume": true,
+      "sameInstantBid": true
+    },
+    {
+      "size": "L",
+      "sameVolume": true,
+      "sameInstantBid": true
+    },
+    {
+      "size": "XL",
+      "sameVolume": true,
+      "sameInstantBid": true
+    },
+    {
+      "size": "XXL",
+      "sameVolume": true,
+      "sameInstantBid": true
+    }
+  ],
+  "allValuesMatch": true,
+  "note": "Observed UI values may be cached. No data refresh or pipeline writes were performed."
+}

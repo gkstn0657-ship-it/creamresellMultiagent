@@ -1,0 +1,3 @@
+{
+  "mcpServers":{"cream_panel":{"type":"stdio","command":"C:/nodejs/node.exe","args":["C:/Users/HansuPark/Desktop/Cream/1109renew/Cream/automation/agent-team/control-mcp.mjs"],"cwd":"C:/Users/HansuPark/Desktop/Cream/1109renew/Cream"}}
+}

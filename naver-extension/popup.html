@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<body style="width:340px;font:12px sans-serif;margin:10px">
+<b>Naver Price Dumper</b><br><br>
+<label><input type="checkbox" id="en"> 자동 실행 (1분마다 작업 확인)</label><br><br>
+<label><input type="checkbox" id="rec"> <b>탐색 기록</b> (마우스 위치·클릭·페이지 글자, 이 컴퓨터에만 저장)</label><br>
+<input id="memo" placeholder="메모(선택): 지금 왜 이걸 보는지" style="width:230px"> <button id="memoBtn">기록</button><br><br>
+<label><input type="checkbox" id="front"> 판매처 창 앞으로 가져오기 (판매처 페이지가 멈출 때만 켜기)</label><br><br>
+<button id="go">지금 실행</button> <button id="stop">중단</button> <button id="resume">중단 해제</button>
+<pre id="log" style="white-space:pre-wrap;max-height:240px;overflow:auto;background:#f4f4f4;padding:6px"></pre>
+<script src="popup.js"></script>

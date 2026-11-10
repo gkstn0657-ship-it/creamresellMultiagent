@@ -1,0 +1,44 @@
+{
+  "pipelineWrites": false,
+  "recordedAt": "2026-11-09T08:34:09.8140938Z",
+  "command": "node automation/no1-mcp-prototype/test-live-navigation.mjs",
+  "files": [
+    {
+      "file": "server-general.mjs",
+      "lastWriteTimeUtc": "2026-11-09T08:32:52.9383228Z",
+      "sha256": "F6C911EBEB12FA42333C457EB176562CC67A62028D8AFB2D0F94E38304CD3958"
+    },
+    {
+      "file": "server-stock.mjs",
+      "lastWriteTimeUtc": "2026-11-09T08:32:52.9403221Z",
+      "sha256": "76D215407EED6B7FE3E39C9EDABE23FB385ED07B56263F46653643FCB49996A4"
+    },
+    {
+      "file": "search-visible-price.ps1",
+      "lastWriteTimeUtc": "2026-11-09T08:32:52.9330378Z",
+      "sha256": "80958BB9C142C2859153B4E351EF2AB26AA0C21F39121583C53AB4E551C3A2A7"
+    },
+    {
+      "file": "search-stock-estimate.ps1",
+      "lastWriteTimeUtc": "2026-11-09T08:32:52.9345443Z",
+      "sha256": "1AF86955E7484839B61346020B71E605F71486C369BFBC37A8967840837E9BA8"
+    },
+    {
+      "file": "screen-navigation.ps1",
+      "lastWriteTimeUtc": "2026-11-09T08:32:52.7554125Z",
+      "sha256": "421412FECBCF275C02E76536468100C8ACA8F1E7AB8BF8BA3672AF792CD5F9AA"
+    },
+    {
+      "file": "test-live-navigation.mjs",
+      "lastWriteTimeUtc": "2026-11-09T08:33:16.6606963Z",
+      "sha256": "7522DD004F3504AF875787AA1E48CE83DB8BBFB84DCC2CFD53D15130DC25A1D2"
+    },
+    {
+      "file": "live-navigation-result.json",
+      "lastWriteTimeUtc": "2026-11-09T08:33:32.5839029Z",
+      "sha256": "1B13E5DA5E9AD34DE74120FF9C2FF7022AD03A5593AD9E478CBDE25875F684FB"
+    }
+  ],
+  "passed": true,
+  "assertionsPassed": 32
+}

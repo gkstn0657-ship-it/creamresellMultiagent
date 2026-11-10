@@ -1,0 +1,31 @@
+{
+  "test": "Actual live wrong-model blocking test; same test-only product URL",
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "no1_search_stock_estimate",
+      "arguments": {
+        "productUrl": "https://www.musinsa.com/products/7481180",
+        "model": "WRONG-MODEL-TEST",
+        "color": "(19)BLACK",
+        "option": "L(100)"
+      }
+    }
+  },
+  "response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "STOCK_PRODUCT_IDENTITY_MISMATCH"
+        }
+      ],
+      "isError": true
+    }
+  },
+  "pipelineWrites": false
+}

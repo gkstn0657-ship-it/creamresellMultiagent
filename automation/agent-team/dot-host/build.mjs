@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import {build} from '../panel-ui/node_modules/esbuild/lib/main.js';
+import {controlTools,PANEL_URI} from '../control-mcp.mjs';
+import {workPolicy} from '../work-orders.mjs';
+import {discoveryPolicy} from '../discovery-policy.mjs';
+const html=fs.readFileSync(new URL('../panel-ui/dist/panel.html',import.meta.url),'utf8');
+const tools=controlTools;
+fs.writeFileSync(new URL('./assets.mjs',import.meta.url),'export const PANEL_URI='+JSON.stringify(PANEL_URI)+';\nexport const workPolicy='+JSON.stringify(workPolicy)+';\nexport const discoveryPolicy='+JSON.stringify(discoveryPolicy)+';\nexport const tools='+JSON.stringify(tools)+';\nexport const panelHtml='+JSON.stringify(html)+';\n');
+await build({entryPoints:['worker.mjs'],bundle:true,format:'esm',platform:'browser',target:'es2022',outfile:'dist/server/index.js'});
+fs.mkdirSync('dist/.openai',{recursive:true});fs.copyFileSync('.openai/hosting.json','dist/.openai/hosting.json');
+console.log('Built private Dot MCP worker.');

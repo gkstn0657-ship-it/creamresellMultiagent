@@ -1,0 +1,43 @@
+{
+  "name": "Agent Cream | Docker 실운영",
+  "id": "50BBXx9Dh0y3c00f",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "수동 실행",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-520, 0]
+    },
+    {
+      "parameters": {
+        "command": "python3 /workspace/pilot.py",
+        "options": {}
+      },
+      "id": "execute-pilot",
+      "name": "Agent Cream 파일럿 실행",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [-260, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first().json;\nconst stdout = String(row.stdout ?? '').trim();\nconst lastLine = stdout.split(/\\r?\\n/).filter(Boolean).at(-1) ?? '';\nconst match = lastLine.match(/^(\\/workspace\\/outputs\\/resale-pilot\\/.*?\\.xlsx)\\s+(\\d+)\\s+(\\d+)$/);\nreturn [{json:{status: match ? 'SUCCESS' : 'FAILED', output_xlsx: match?.[1] ?? '', target_count: Number(match?.[2] ?? 0), observation_count: Number(match?.[3] ?? 0), stdout, stderr: String(row.stderr ?? ''), finished_at_kst: $now.setZone('Asia/Seoul').toISO()}}];"
+      },
+      "id": "normalize",
+      "name": "결과 정규화",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 0]
+    }
+  ],
+  "connections": {
+    "수동 실행": {"main": [[{"node": "Agent Cream 파일럿 실행", "type": "main", "index": 0}]]},
+    "Agent Cream 파일럿 실행": {"main": [[{"node": "결과 정규화", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1", "timezone": "Asia/Seoul"},
+  "active": false,
+  "pinData": {},
+  "tags": []
+}

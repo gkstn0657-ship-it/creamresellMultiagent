@@ -1,0 +1,12 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {dispatch,validateSearchArgs,validateSearchEvidence} from './server-general.mjs';
+const a={kreamId:'756827',model:'RCCMSS713A005086W103'};
+const e={...a,identityVerifiedFromVisibleLink:true,volumeLabel:'30일 예상 거래량',capturedAt:'2026-11-09T08:00:00Z',uiAsOfLabel:'오늘 16:25기준 최신',sizes:[{size:'XXXL',estimatedTrades30d:1,instantBidKrw:null}]};
+test('old and search tools coexist',async()=>assert.deepEqual((await dispatch({id:1,method:'tools/list'})).result.tools.map(t=>t.name),['no1_read_price_comparison','no1_search_price_comparison']));
+test('model commands and extra properties blocked',()=>{assert.throws(()=>validateSearchArgs({...a,model:'x;exit'}));assert.throws(()=>validateSearchArgs({...a,command:'x'}));});
+test('wrong link ID blocked',()=>assert.throws(()=>validateSearchEvidence({...e,kreamId:'280933'},a)));
+test('wrong model blocked',()=>assert.throws(()=>validateSearchEvidence({...e,model:'wrong'},a)));
+test('unverified link blocked',()=>assert.throws(()=>validateSearchEvidence({...e,identityVerifiedFromVisibleLink:false},a)));
+test('stale source holds with original timestamp',()=>{const r=validateSearchEvidence(e,a,Date.parse('2026-11-09T08:00:01Z'));assert.equal(r.dataAsOf,'2026-11-09T07:25:00.000Z');assert.equal(r.freshnessReason,'NO1_STALE');assert.equal(r.decision,'hold');});
+test('missing source date stale',()=>assert.equal(validateSearchEvidence({...e,uiAsOfLabel:null},a).freshnessReason,'NO1_STALE'));
+test('freshness alone never promotes',()=>{const r=validateSearchEvidence({...e,uiAsOfLabel:'오늘 17:00기준 최신'},a,Date.parse('2026-11-09T08:00:01Z'));assert.equal(r.freshEvidence,true);assert.equal(r.promotionAllowed,false);assert.equal(r.decision,'hold');});

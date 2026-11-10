@@ -1,0 +1,142 @@
+{
+  "surveyedAt": "2026-11-09T15:07:02.674Z",
+  "kind": "static-installed-code-survey",
+  "app": {
+    "name": "no1-center-electron",
+    "version": "1.35.8"
+  },
+  "code": {
+    "main": {
+      "path": "dist-electron/electron/main.js",
+      "sha256": "7e64e66dbc7677c522e35b7ebb8206460014301d84ddc3dbc2819c729b0fea79"
+    },
+    "preload": {
+      "path": "dist-electron/electron/preload.js",
+      "sha256": "ff4d85ee79733f49f0045beb49aa96f48b8e1220ec6aae7b53e1870fc176432d"
+    }
+  },
+  "boundaries": {
+    "appCodeExecuted": false,
+    "accountStorageRead": false,
+    "appConfigurationRead": false,
+    "uiOperated": false,
+    "authenticatedRemoteCommandsSent": false,
+    "liveBackgroundLookupVerified": false
+  },
+  "locations": {
+    "function buildReqEnvelope(": [
+      {
+        "offset": 891848,
+        "line": 24145
+      }
+    ],
+    "function isRemoteDispatchAllowed(": [
+      {
+        "offset": 1192174,
+        "line": 31616
+      }
+    ],
+    "async dispatch(traceId, cmd, payload)": [
+      {
+        "offset": 1194814,
+        "line": 31684
+      }
+    ],
+    "channel: \"stock:check\"": [
+      {
+        "offset": 5503413,
+        "line": 144040
+      }
+    ],
+    "channel: \"market:kream:prices\"": [
+      {
+        "offset": 3027867,
+        "line": 83742
+      }
+    ],
+    "channel: \"market:kream:details\"": [
+      {
+        "offset": 3027325,
+        "line": 83726
+      }
+    ],
+    "channel: \"musinsa:product:benefit\"": [
+      {
+        "offset": 5903484,
+        "line": 153772
+      }
+    ],
+    "channel: \"musinsa:ranking:check-login\"": [
+      {
+        "offset": 5905403,
+        "line": 153828
+      }
+    ],
+    "function planMusinsaGuestRoute(": [
+      {
+        "offset": 1033336,
+        "line": 27506
+      }
+    ],
+    "async function sendViaChromium(": [
+      {
+        "offset": 1034655,
+        "line": 27533
+      }
+    ],
+    "sessionFor: (partition) =>": [
+      {
+        "offset": 6434854,
+        "line": 166228
+      }
+    ],
+    "async function withMusinsaSession(": [
+      {
+        "offset": 5473693,
+        "line": 143269
+      }
+    ],
+    "async function ensureBrowserReady()": [
+      {
+        "offset": 2311754,
+        "line": 66834
+      }
+    ],
+    "function resolveKreamBrowserHostFrom(": [
+      {
+        "offset": 1130138,
+        "line": 29950
+      }
+    ],
+    "async function launchElectronBrowserSession(": [
+      {
+        "offset": 1105562,
+        "line": 29368
+      }
+    ],
+    "const uiResult = await deps6.kreamSearchViaUi(keyword);": [
+      {
+        "offset": 3112552,
+        "line": 86087
+      }
+    ],
+    "async fetchStockViaCartBatched(": [
+      {
+        "offset": 4914301,
+        "line": 129648
+      }
+    ],
+    "async processBatchInWindow(": [
+      {
+        "offset": 4909674,
+        "line": 129537
+      }
+    ],
+    "headless: false": [
+      {
+        "offset": 1073408,
+        "line": 28548
+      }
+    ]
+  }
+}

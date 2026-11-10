@@ -1,0 +1,14 @@
+FROM python:3.14-alpine3.23 AS python-runtime
+RUN pip install --no-cache-dir --target=/opt/cream-deps requests beautifulsoup4 lxml openpyxl
+
+FROM n8nio/n8n:2.46.5
+USER root
+COPY --from=python-runtime /usr/local/ /usr/local/
+COPY --from=python-runtime /usr/lib/ /usr/lib/
+COPY --from=python-runtime /lib/ /lib/
+COPY --from=python-runtime /opt/cream-deps/ /opt/cream-deps/
+RUN mkdir -p /workspace /home/node/.n8n && chown -R node:node /workspace /home/node/.n8n
+ENV PYTHONPATH="/opt/cream-deps"
+ENV CREAM_DOCKER=1
+USER node
+WORKDIR /workspace

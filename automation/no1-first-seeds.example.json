@@ -1,0 +1,17 @@
+{
+  "version": "no1-first-seeds-v1",
+  "items": [
+    {
+      "kreamId": "1120286",
+      "kreamModel": "NBNPG41033-19",
+      "sourceModel": "NBNPG41033",
+      "identityMappingVerified": true,
+      "identityBasis": "No1 market showed the black NBNPG41033-19 KREAM product; the Musinsa 7481180 result showed base model NBNPG41033 with explicit (19)BLACK and L(100). Verified only for this product mapping.",
+      "sourceUrl": "https://www.musinsa.com/products/7481180",
+      "sourceColor": "(19)BLACK",
+      "options": [
+        {"size": "L", "sourceOption": "L(100)", "sourceColor": "(19)BLACK"}
+      ]
+    }
+  ]
+}

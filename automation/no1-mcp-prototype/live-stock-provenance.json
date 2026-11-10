@@ -1,0 +1,46 @@
+{
+  "serverCommand": "node automation/no1-mcp-prototype/server-stock.mjs --enable-live-ui",
+  "liveWrongModelBlocked": true,
+  "recordedAt": "2026-11-09T08:31:27.8837605Z",
+  "liveQueryPassed": true,
+  "tool": "no1_search_stock_estimate",
+  "unitTestsPassed": 28,
+  "files": [
+    {
+      "file": "server-stock.mjs",
+      "sha256": "604AFFEAAD56D195381A0522D5ED5D8B1502FD6DCE83138874A80BBB3BD92E99",
+      "lastWriteTimeUtc": "2026-11-09T08:29:24.9429719Z"
+    },
+    {
+      "file": "search-stock-estimate.ps1",
+      "sha256": "1B166A80C00AC57D748D90DCD2C7DEA01B12860A74559578B54D022D59EE082B",
+      "lastWriteTimeUtc": "2026-11-09T08:30:01.6041457Z"
+    },
+    {
+      "file": "server-stock.test.mjs",
+      "sha256": "B59C958AAF1A4BF5494A2E59CC5DF9385A5BFAD9DACAC83545244F0593DC6F8F",
+      "lastWriteTimeUtc": "2026-11-09T08:30:49.3290301Z"
+    },
+    {
+      "file": "test-live-stock.mjs",
+      "sha256": "ABA45F4D2F78EBBFDE823982BE1BF6FC9D4D0BD38A1B05B27BF1B6BCFB51005B",
+      "lastWriteTimeUtc": "2026-11-09T08:29:24.9429719Z"
+    },
+    {
+      "file": "test-live-stock-mismatch.mjs",
+      "sha256": "96AC9863FAC0E9A4944CCAB2D8DB3343DAE924BE72212F913493D1E1629D0D37",
+      "lastWriteTimeUtc": "2026-11-09T08:30:49.4861194Z"
+    },
+    {
+      "file": "live-stock-result.json",
+      "sha256": "CA240CED54F59144B8D519C5D206DCDC5FB69A669574BE91537AAD49F4DE8702",
+      "lastWriteTimeUtc": "2026-11-09T08:30:06.2882738Z"
+    },
+    {
+      "file": "live-stock-mismatch-result.json",
+      "sha256": "E25EEC16AEA7EB1BE0B099EF50B753902FE00CF24FCF21576F17299D86DC3691",
+      "lastWriteTimeUtc": "2026-11-09T08:30:53.7949970Z"
+    }
+  ],
+  "pipelineWrites": false
+}

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="popup.css">
+    <title>Activity Recorder</title>
+  </head>
+  <body>
+    <main>
+      <h1>전체 탭 기록</h1>
+      <p id="status">상태 확인 중…</p>
+      <p id="meta"></p>
+      <button id="start" class="primary">모든 탭 기록 시작</button>
+      <button id="stop">기록 중지</button>
+      <hr>
+      <button id="json">JSON 내보내기</button>
+      <button id="markdown">Markdown 내보내기</button>
+      <button id="clear" class="danger">기록 지우기</button>
+      <p class="note">입력값·검색어·페이지 제목은 저장하지 않습니다.</p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
