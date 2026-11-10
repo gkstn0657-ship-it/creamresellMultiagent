@@ -6,8 +6,9 @@ const reasonText={NO1_WEB_TAB_REQUIRED:'No1 웹 탭을 찾지 못했습니다. �
 const eventText=e=>{
  const id=e.sourceId?` #${e.sourceId}`:'';
  if(e.type==='source_processed')return `상품${id} ${e.reason?'제외 · '+(reasonText[e.reason]||e.reason):'수집 완료'}`;
- if(e.type==='source_retry')return `연결 재시도 · ${e.reason||'잠시 지연'}`;
- if(e.type==='source_recovered')return '연결 복구 · 같은 요청으로 탐색 재개';
+ if(e.type==='source_retry')return `조회 재시도 · ${e.reason||'잠시 지연'}`;
+ if(e.type==='source_recovered')return '조회 복구 · 같은 요청으로 탐색 재개';
+ if(e.type==='source_lookup_skipped')return `상품${id} 조회 실패 · 다음 상품으로 이동 · ${e.reason||''}`;
  if(e.type==='work_needs_attention')return `작업 주의 · ${e.reason||'연결 확인 필요'}`;
  if(e.type==='continuous_wait')return `자동 재시도 대기 · ${e.reason||'잠시 후 다시 확인'}`;
  if(e.type==='ranking_loaded')return '카테고리 인기순 목록 수신';
@@ -63,7 +64,7 @@ function render(data){
  if(waiting){set('activity-kicker','PAUSED · RETRY SCHEDULED');set('activity-title','탐색이 잠시 멈췄어요');set('activity-detail',reasonText[data.waitReason]||`오류: ${data.waitReason||'연결 확인 필요'}`);set('activity-meta','저장된 상품 위치와 판단 결과는 그대로 보존됩니다.');}
  else if(offline){set('activity-kicker','WORKER OFFLINE');set('activity-title','실행기가 작동하지 않아요');set('activity-detail',data.error||'작업 연결을 확인해 주세요.');set('activity-meta','마지막으로 저장한 결과를 표시하고 있습니다.');}
  else if(data.status==='judging'){set('activity-kicker','AGENT REVIEW');set('activity-title','AI가 상품을 검토하고 있어요');set('activity-detail','상품별 수익성 판단과 독립 검토 결과를 기다리고 있습니다.');set('activity-meta',`현재 배치 ${data.lastBatch.judged}/${data.lastBatch.productCount}개 판단`);}
- else if(data.status==='recovering'){set('activity-kicker','SOURCE RECOVERY');set('activity-title','연결을 다시 시도하고 있어요');set('activity-detail',reasonText[data.error]||'같은 상품 요청을 재시도합니다.');set('activity-meta','실패한 상품을 탈락으로 기록하지 않습니다.');}
+ else if(data.status==='recovering'){set('activity-kicker','SOURCE RECOVERY');set('activity-title','조회 요청을 다시 확인하고 있어요');set('activity-detail',reasonText[data.error]||'연결 및 요청 상태를 확인합니다.');set('activity-meta','상품 조회 실패는 기록 후 다음 상품으로 넘어갑니다.');}
  else{set('activity-kicker','DISCOVERY IN PROGRESS');set('activity-title','인기순 상품을 찾고 있어요');set('activity-detail','마진율, 재고, 최근 판매동향으로 후보를 선별하고 있습니다.');set('activity-meta',`누적 ${format(data.checked)}건 확인 · ${format(data.qualified)}개 검토 통과`);}
  set('last-updated',data.updatedAt?`작업 기록 ${kst(data.updatedAt)} 갱신`:'작업 기록 없음');
  set('pipeline-status',waiting?'연결 대기':data.status==='judging'?'AI 검토 중':active?'탐색 중':data.status==='stopped'?'중지됨':'확인 필요');

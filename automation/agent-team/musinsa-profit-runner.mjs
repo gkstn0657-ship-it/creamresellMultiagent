@@ -5,7 +5,7 @@ import {collectRankingCandidate,qualifyRankingResult} from './musinsa-ranking-co
 import {workOrders,workSummary,reserveWork,withWorkLock} from './work-orders.mjs';
 import {runBatch} from './batch.mjs';import {groupProducts} from './packets.mjs';import {digest} from './store.mjs';
 import {writeJsonAtomic as write} from './atomic-json.mjs';
-import {recoveringClient} from './source-recovery.mjs';
+import {recoveringClient,isProductLookupFailure} from './source-recovery.mjs';
 import {classifyError} from './error-catalog.mjs';
 const read=p=>fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):null;
 const idFor=(work,n)=>'batch-'+crypto.createHash('sha256').update(`musinsa-profit:${work}:${n}`).digest('hex').slice(0,32).replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5');
@@ -24,9 +24,9 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
   const emit=e=>{onEvent(e);save();};
   let pending=(state.pendingSourceIds||[]).map(id=>read(path.join(sourceDir,'evidence',id,'packet.json')));
   if(pending.some(p=>!p))throw Error('PENDING_PACKET_MISSING');
-  client=recoveringClient(client,{...recovery,stopped:stop,onRecovery:e=>{
+  client=recoveringClient(client,{lookupDelays:work.continuous?[1000]:null,...recovery,stopped:stop,onRecovery:e=>{
     state.recovery={...e,errorCode:e.error?classifyError({reason:e.error}).code:null,sourceId:state.currentSource?.productId||null,at:new Date().toISOString()};
-    state.status=e.type==='source_retry'?'recovering':e.type==='source_recovered'?'discovering':'needs_attention';emit(e);
+    state.status=e.type==='source_retry'?'recovering':e.type==='source_recovered'?'discovering':'needs_attention';emit({...e,sourceId:state.recovery.sourceId,at:state.recovery.at});
   }});
   try{
     const settings=projectRankingSettings(await client.request('musinsa:ranking:settings',{}));
@@ -36,6 +36,16 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
     const categories=settings.category==='000'?['000',...CATEGORIES.filter(c=>c!=='000')]:[settings.category];
     const key=JSON.stringify(settings),context=memory.contexts[key]||{categoryIndex:0};memory.contexts[key]=context;
     const seenSources=new Set(memory.seenSourceIds),seenMarkets=new Set(memory.seenKreamIds);
+    const skipFailedLookup=(source,reason,attempts)=>{
+      state.checkedSources++;seenSources.add(source.productId);memory.seenSourceIds=[...seenSources];
+      state.retrySources=(state.retrySources||[]).filter(s=>s.productId!==source.productId);
+      state.skipped.push({sourceId:source.productId,kreamId:null,reason,code:classifyError({reason}).code,lookupFailed:true,attempts});
+      state.status='discovering';
+      emit({type:'source_lookup_skipped',sourceId:source.productId,rank:source.rank,reason,attempts,at:new Date().toISOString()});
+    };
+    // A saved lookup with at least two failures already exhausted the new
+    // one-retry policy. Preserve evidence and continue after upgrading a run.
+    if(work.continuous&&['source_retry','source_recovery_exhausted'].includes(state.recovery?.type)&&(state.recovery.attempts||state.recovery.attempt)>=2&&state.currentSource?.productId===state.recovery.sourceId&&!seenSources.has(state.currentSource.productId)&&isProductLookupFailure(state.recovery.cmd,state.recovery.error))skipFailedLookup(state.currentSource,state.recovery.error,state.recovery.attempts||state.recovery.attempt);
     const updateProgress=()=>{const summary=workSummary(root,workOrders(root).find(w=>w.id===workId));state.profitableProductsFound=summary.profitableProductsFound;return summary;};
     const flush=async()=>{
       if(!pending.length||stop())return;
@@ -52,7 +62,7 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
       state.batches.push({runId:id,status:result.status,qualified:result.results.filter(r=>r.qualification.passed).map(r=>r.productId)});updateProgress();emit({type:'profit_progress',found:state.profitableProductsFound,target:work.targetProfitableProducts,checkedSources:state.checkedSources});
       if(result.status!=='complete')throw Error('BATCH_NEEDS_ATTENTION');
     };
-    delete state.error;delete state.finishedAt;
+    delete state.error;delete state.errorCode;delete state.finishedAt;delete state.waitReason;delete state.retryAt;
     state.status='discovering';updateProgress();save();if(pending.length)await flush();
     for(;context.categoryIndex<categories.length&&!stop();context.categoryIndex++){
       const category=categories[context.categoryIndex];state.currentCategory=category;state.status='discovering';save();
@@ -69,6 +79,9 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
         let result;try{
         result=await collect({...source,category,observedAt:new Date().toISOString()},{client,seenKreamIds:seenMarkets,onEvidence:async(cmd,payload,data)=>write(path.join(evidenceDir,`${++evidenceIndex}.json`),{cmd,payload,data,observedAt:new Date().toISOString()})});
         }catch(e){
+          if(work.continuous&&state.recovery?.type==='source_recovery_exhausted'&&state.recovery.sourceId===source.productId&&isProductLookupFailure(state.recovery.cmd,e.message)){
+            skipFailedLookup(source,e.message,state.recovery.attempts);continue;
+          }
           // Only an established product-specific mismatch is an exclusion.
           // Infrastructure, malformed responses and unexpected bugs retain the
           // source and cursor, and must reach the work-level failure handler.
