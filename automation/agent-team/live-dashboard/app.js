@@ -2,7 +2,7 @@ const el=id=>document.getElementById(id);
 const set=(id,value)=>{el(id).textContent=String(value??'—');};
 const format=n=>Number(n||0).toLocaleString('ko-KR');
 const kst=at=>at?new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(at)):'—';
-const reasonText={NO1_WEB_TAB_REQUIRED:'No1 웹 탭을 찾지 못했습니다. 로그인된 소싱 페이지가 열리면 다시 시도합니다.',NO1_AUTH_REQUIRED:'No1 로그인 상태를 확인할 수 없습니다.',KREAM_SEARCH_FAILED:'KREAM 검색이 실패해 같은 상품을 보존하고 재시도합니다.',NO1_BRIDGE_TIMEOUT:'No1 연결 시간이 초과되어 재시도합니다.',EXACT_MARKET_MODEL_NOT_FOUND:'KREAM에서 동일 품번을 확인하지 못함',AVAILABLE_OPTION_NOT_BOUND:'재고 있는 옵션과 KREAM 사이즈를 연결하지 못함',NO_POSITIVE_MARGIN_IN_BOUND_AVAILABLE_OPTIONS:'재고 있는 옵션에서 양수 마진 없음',NO_AVAILABLE_STOCK:'구매 가능한 재고 없음'};
+const reasonText={NO1_WEB_TAB_REQUIRED:'No1 웹 탭을 찾지 못했습니다. 로그인된 소싱 페이지가 열리면 다시 시도합니다.',NO1_AUTH_REQUIRED:'No1 로그인 상태를 확인할 수 없습니다.',NO1_BRIDGE_DISCONNECTED:'No1 Background Connector 연결이 끊겼습니다. 연결 담당이 상태를 확인하고 있습니다.',NO1_BRIDGE_UNAVAILABLE:'No1 로컬 브리지에 연결할 수 없습니다.',WORKER_NOT_RUNNING:'탐색 실행기가 종료돼 작업 담당이 재시작을 확인합니다.',WORKER_PROGRESS_STALE:'탐색 기록이 5분 넘게 갱신되지 않았습니다.',KREAM_SEARCH_FAILED:'KREAM 검색이 실패해 같은 상품을 보존하고 재시도합니다.',NO1_BRIDGE_TIMEOUT:'No1 연결 시간이 초과되어 재시도합니다.',EXACT_MARKET_MODEL_NOT_FOUND:'KREAM에서 동일 품번을 확인하지 못함',AVAILABLE_OPTION_NOT_BOUND:'재고 있는 옵션과 KREAM 사이즈를 연결하지 못함',NO_POSITIVE_MARGIN_IN_BOUND_AVAILABLE_OPTIONS:'재고 있는 옵션에서 양수 마진 없음',NO_AVAILABLE_STOCK:'구매 가능한 재고 없음'};
 const eventText=e=>{
  const id=e.sourceId?` #${e.sourceId}`:'';
  if(e.type==='source_processed')return `상품${id} ${e.reason?'제외 · '+(reasonText[e.reason]||e.reason):'수집 완료'}`;
@@ -50,7 +50,7 @@ function render(data){
  set('target-caption',data.continuous?'계속 탐색 · 최초 목표 '+format(data.initialTarget)+'개':'목표 '+format(data.initialTarget)+'개');
  el('hero-panel').dataset.state=waiting?'waiting':offline?'offline':'active';
  el('live-pill').className=`live-pill ${waiting?'waiting':offline?'offline':''}`;
- set('live-pill',waiting?'● 자동 재시도 대기':offline?'● 실행 중단':active?'● 실제 작업 진행 중':'● 상태 확인 중');
+ set('live-pill',waiting?`● ${data.monitor?.code||''} 자동 재시도 대기`:offline?'● 실행 중단':active?'● 실제 작업 진행 중':'● 상태 확인 중');
  set('orb-symbol',waiting?'Ⅱ':offline?'×':data.status==='judging'?'◇':'✦');
  if(waiting){set('activity-kicker','PAUSED · RETRY SCHEDULED');set('activity-title','탐색이 잠시 멈췄어요');set('activity-detail',reasonText[data.waitReason]||`오류: ${data.waitReason||'연결 확인 필요'}`);set('activity-meta','저장된 상품 위치와 판단 결과는 그대로 보존됩니다.');}
  else if(offline){set('activity-kicker','WORKER OFFLINE');set('activity-title','실행기가 작동하지 않아요');set('activity-detail',data.error||'작업 연결을 확인해 주세요.');set('activity-meta','마지막으로 저장한 결과를 표시하고 있습니다.');}

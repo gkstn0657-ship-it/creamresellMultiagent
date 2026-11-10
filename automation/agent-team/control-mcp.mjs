@@ -14,6 +14,7 @@ const PANEL_FILE=fileURLToPath(new URL('./panel-ui/dist/panel.html',import.meta.
 const ROOT=fileURLToPath(new URL('../../kream-runs/agent-teams/',import.meta.url));
 const BATCH=fileURLToPath(new URL('./batch.mjs',import.meta.url));
 const CONTINUOUS=fileURLToPath(new URL('./musinsa-continuous.mjs',import.meta.url));
+const WATCHDOG=fileURLToPath(new URL('./live-watchdog.mjs',import.meta.url));
 const object=(properties,required=Object.keys(properties))=>({type:'object',properties,required,additionalProperties:false});
 const runId={type:'string',pattern:'^batch-[a-f0-9-]{36}$'},str={type:'string'};
 const workId={type:'string',pattern:'^work-[a-f0-9-]{36}$'},eventId={type:'string',pattern:'^evt-[a-f0-9]{64}$'};
@@ -59,12 +60,19 @@ export async function control(name,args={},options={}) {
   if(['cream_work_start','cream_musinsa_profit_work_start'].includes(name))return withWorkLock(root,()=>startWork(root,args));
   if(name==='cream_musinsa_work_continue')return withWorkLock(root,async()=>{
     const summary=continueWorkUntilStopped(root,args.workId),dir=path.join(root,'explorations',args.workId),lock=path.join(dir,'continuous.lock');
-    if(fs.existsSync(lock)){try{process.kill(Number(fs.readFileSync(lock,'utf8')),0);return {...summary,launched:false,reused:true};}catch{}}
-    if(options.launchContinuous)return {...summary,...await options.launchContinuous({root,workId:args.workId})};
+    const ensureWatchdog=async()=>{
+      const watchdogLock=path.join(dir,'watchdog.lock');if(fs.existsSync(watchdogLock))try{process.kill(Number(fs.readFileSync(watchdogLock,'utf8')),0);return;}catch{}
+      if(options.launchWatchdog){await options.launchWatchdog({root,workId:args.workId});return;}
+      fs.mkdirSync(dir,{recursive:true});const output=fs.openSync(path.join(dir,'watchdog.log'),'a');
+      const child=spawn(process.execPath,[WATCHDOG,`--root=${root}`,`--work=${args.workId}`],{cwd:fileURLToPath(new URL('../../',import.meta.url)),windowsHide:true,detached:true,stdio:['ignore',output,output]});
+      try{await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});}finally{fs.closeSync(output);}child.unref();
+    };
+    if(fs.existsSync(lock)){let running=false;try{process.kill(Number(fs.readFileSync(lock,'utf8')),0);running=true;}catch{}if(running){await ensureWatchdog();return {...summary,launched:false,reused:true};}}
+    if(options.launchContinuous){const launched=await options.launchContinuous({root,workId:args.workId});await ensureWatchdog();return {...summary,...launched};}
     fs.mkdirSync(dir,{recursive:true});const output=fs.openSync(path.join(dir,'continuous.log'),'a');
     const child=spawn(process.execPath,[CONTINUOUS,`--root=${root}`,`--work=${args.workId}`],{cwd:fileURLToPath(new URL('../../',import.meta.url)),windowsHide:true,detached:true,stdio:['ignore',output,output]});
     try{await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});}finally{fs.closeSync(output);}
-    child.unref();return {...summary,launched:true,pid:child.pid};
+    child.unref();await ensureWatchdog();return {...summary,launched:true,pid:child.pid};
   });
   if(name==='cream_work_stop')return withWorkLock(root,()=>stopWork(root,args.workId));
   if(name==='cream_explore_start')return startExploration(root,args,options);

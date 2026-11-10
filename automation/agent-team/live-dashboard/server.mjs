@@ -25,6 +25,8 @@ export function liveDashboardData(root=defaultRoot,workId){
  const work=works.find(w=>w.status!=='stopped')||works[0];
  if(!work)return {version:1,observedAt:new Date().toISOString(),status:'not_started',workerAlive:false,checked:0,qualified:0,recent:[],events:[]};
  const dir=path.join(root,'explorations',work.id),state=read(path.join(dir,'state.json'))||{};
+ const monitor=read(path.join(dir,'monitor.json'));
+ const monitorFresh=monitor?.at&&Date.now()-Date.parse(monitor.at)<30000;
  const workerPid=Number((()=>{try{return fs.readFileSync(path.join(dir,'continuous.lock'),'utf8');}catch{return 0;}})());
  const workerAlive=alive(workerPid);
  const batches=(state.batches||[]).filter(b=>safeBatchId(b.runId));
@@ -43,7 +45,7 @@ export function liveDashboardData(root=defaultRoot,workId){
  recent.sort((a,b)=>String(b.at).localeCompare(String(a.at)));
  const current=safeBatchId(state.currentRunId)?read(path.join(root,state.currentRunId,'batch-state.json')):null;
  const activeJudging=workerAlive&&state.status==='running_batch'&&current?.status==='judging';
- const status=work.status==='stopped'||state.status==='stopped'?'stopped':!workerAlive?'offline':state.status==='waiting_for_retry'?'waiting':state.status==='recovering'?'recovering':state.status==='running_batch'?'judging':state.status==='discovering'?'discovering':state.status||'starting';
+ const status=work.status==='stopped'||state.status==='stopped'?'stopped':!workerAlive?'offline':monitorFresh&&monitor.severity==='error'?'waiting':state.status==='waiting_for_retry'?'waiting':state.status==='recovering'?'recovering':state.status==='running_batch'?'judging':state.status==='discovering'?'discovering':state.status||'starting';
  return {
   version:1,observedAt:new Date().toISOString(),workId:work.id,status,workerAlive,continuous:work.continuous===true,
   checked:state.checkedSources||0,qualified:state.profitableProductsFound||0,initialTarget:work.targetProfitableProducts||null,
@@ -51,7 +53,8 @@ export function liveDashboardData(root=defaultRoot,workId){
   current:{category:state.currentCategory||null,rank:state.currentSource?.rank||null,name:state.currentSource?.productName||null,sourceId:state.currentSource?.productId||null},
   lastBatch:{runId:state.currentRunId||null,status:current?.status||null,productCount:current?.productCount||0,judged:current?.judged||0},
   agents:{owner:activeJudging?'judging':'idle',reviewer:activeJudging?'possibly_reviewing':'idle'},
-  updatedAt:state.updatedAt||null,retryAt:state.retryAt||null,waitReason:state.waitReason||null,error:state.error||null,
+  updatedAt:state.updatedAt||null,retryAt:state.retryAt||null,waitReason:status==='waiting'&&monitorFresh&&monitor.severity==='error'?monitor.reason:state.waitReason||null,error:state.error||null,
+  monitor:monitorFresh?{code:monitor.code,status:monitor.status,reason:monitor.reason,handler:monitor.handler,action:monitor.action,at:monitor.at}:null,
   featured:recent.find(r=>r.qualified)||null,recent:recent.slice(0,8),events:recentEvents(path.join(dir,'continuous.log')),
  };
 }

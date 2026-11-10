@@ -25,7 +25,11 @@ export async function runContinuousMusinsa({root,workId,run=runMusinsaProfitSear
    state.status='waiting_for_retry';state.waitReason=result.status==='source_exhausted'?'new_ranking_cycle':result.error||result.status;
    state.retryAt=new Date(Date.now()+waitMs).toISOString();write(stateFile,state);
    onEvent({type:'continuous_wait',reason:state.waitReason,retryAt:state.retryAt,found:state.profitableProductsFound});
-   for(let left=waitMs;left>0&&!stopped();left-=1000)await sleep(Math.min(left,1000));
+   const wake=path.join(dir,'WAKE');
+   for(let left=waitMs;left>0&&!stopped();left-=1000){
+    if(fs.existsSync(wake)){fs.unlinkSync(wake);onEvent({type:'continuous_woken',reason:'connector_recovered'});break;}
+    await sleep(Math.min(left,1000));
+   }
   }
   const stateFile=path.join(dir,'state.json'),state=read(stateFile)||{};state.status='stopped';state.finishedAt=new Date().toISOString();write(stateFile,state);
   return state;

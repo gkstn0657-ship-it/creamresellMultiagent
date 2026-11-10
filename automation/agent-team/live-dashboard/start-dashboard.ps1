@@ -8,6 +8,31 @@ $taskRepo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\..')).Pat
 if (-not $Root) { $Root = Join-Path (Split-Path -Parent $taskRepo) 'Cream\kream-runs\agent-teams' }
 $taskRoot = [System.IO.Path]::GetFullPath($Root)
 $taskNode = (Get-Command node -ErrorAction Stop).Source
+if (-not $WorkId) {
+    $taskOrders = Join-Path $taskRoot 'work-orders'
+    if (Test-Path -LiteralPath $taskOrders) {
+        foreach ($taskFile in (Get-ChildItem -LiteralPath $taskOrders -Filter 'work-*.json' -File | Sort-Object LastWriteTime -Descending)) {
+            try { $taskWork = Get-Content -LiteralPath $taskFile.FullName -Raw | ConvertFrom-Json } catch { continue }
+            if ($taskWork.status -eq 'open' -and $taskWork.continuous -eq $true) { $WorkId = $taskWork.id; break }
+        }
+    }
+}
+if ($WorkId -and $WorkId -match '^work-[a-f0-9-]{36}$') {
+    $taskWorkDir = Join-Path $taskRoot ('explorations\' + $WorkId)
+    $taskWatchLock = Join-Path $taskWorkDir 'watchdog.lock'
+    $taskWatchRunning = $false
+    if (Test-Path -LiteralPath $taskWatchLock) {
+        try {
+            $taskWatchPid = [int](Get-Content -LiteralPath $taskWatchLock -Raw)
+            $taskWatchRunning = [bool](Get-Process -Id $taskWatchPid -ErrorAction SilentlyContinue)
+        } catch { $taskWatchRunning = $false }
+    }
+    if (-not $taskWatchRunning) {
+        New-Item -ItemType Directory -Path $taskWorkDir -Force | Out-Null
+        $taskWatchScript = Join-Path $taskRepo 'automation\agent-team\live-watchdog.mjs'
+        Start-Process -FilePath $taskNode -ArgumentList @(('"' + $taskWatchScript + '"'),('"--root=' + $taskRoot + '"'),('--work=' + $WorkId)) -WorkingDirectory $taskRepo -WindowStyle Hidden -RedirectStandardOutput (Join-Path $taskWorkDir 'watchdog.log') -RedirectStandardError (Join-Path $taskWorkDir 'watchdog-error.log') | Out-Null
+    }
+}
 $taskEdge = @('C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe','C:\Program Files\Microsoft\Edge\Application\msedge.exe') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if (-not $taskEdge) { throw 'Microsoft Edge is required for the dashboard app window.' }
 $taskUrl = "http://127.0.0.1:$Port/"
