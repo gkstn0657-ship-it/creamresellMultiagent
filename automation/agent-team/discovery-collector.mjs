@@ -5,6 +5,7 @@ import {marketEvidence} from '../no1-background/market-evidence.mjs';
 import {digest} from './store.mjs';
 import {validateCandidate} from './discovery-policy.mjs';
 import {matchMarketSize} from '../no1-background/size-binding.mjs';
+import {retailer29cm} from './retailer-29cm.mjs';
 const catalog=JSON.parse(fs.readFileSync(new URL('./catalog-evidence.json',import.meta.url),'utf8'));
 const normalize=s=>String(s||'').toUpperCase().replace(/\s+/g,'');
 export function sameColor(a,b){
@@ -22,7 +23,7 @@ export function sourceOptionColor(stock,option){
 export {parseMusinsaSearch,searchMusinsa} from './source-search.mjs';
 import {searchMusinsa} from './source-search.mjs';
 export const fatalCollectionError=e=>/LOGIN_REQUIRED|TOKEN_EXPIRED|NO1_(?:AUTH|BRIDGE|BACKGROUND|CONNECTOR|WEB_TAB|BROWSER|RELAY|CONNECTION|COMMAND)|ELECTRON_|CMD_NOT_FOUND|REMOTE_COMMAND_FORBIDDEN/.test(e.message);
-export async function collectCandidate(candidate,{client=new BackgroundClient(),search=searchMusinsa,collect=null,mode='live',stopped=()=>false}={}){
+export async function collectCandidate(candidate,{client=new BackgroundClient(),search=searchMusinsa,collect=null,mode='live',stopped=()=>false,additionalRetailers}={}){
  validateCandidate(candidate);const observations=[],offers=[],sourceQuotes=[],gaps=new Set(),started=Date.now(),requestTimings=[];
  const observe=(kind,payload,observedAt=new Date().toISOString())=>observations.push({kind,mode,observedAt,payload});
  observe('catalog_candidate',candidate,candidate.discovery.observedAt);
@@ -82,13 +83,29 @@ export async function collectCandidate(candidate,{client=new BackgroundClient(),
    }
   }
  }
+ const retailers=additionalRetailers??(mode==='live'?[retailer29cm]:[]),retailersSearched=['musinsa'];
+ for(const retailer of retailers){
+  retailersSearched.push(retailer.name);const visitedPublic=new Set();let checked=0;
+  for(const model of models){
+   check();let result;
+   try{result=await retailer.search(model);observe('source_search',{...result,retailer:retailer.name,items:result.items.slice(0,10)});}
+   catch(e){gaps.add(e.message);observe('source_search_error',{retailer:retailer.name,query:model,code:e.message});continue;}
+   if(result.hasNext||result.items.length>3)gaps.add('sourceSearchCoveragePartial');
+   for(const source of result.items){
+    check();if(visitedPublic.has(source.productUrl))continue;if(checked>=3)break;visitedPublic.add(source.productUrl);checked++;
+    try{const quote=await retailer.quote({productUrl:source.productUrl,model});
+     observe('source_quote',{...quote,productId:candidate.kreamId},quote.observedAt);sourceQuotes.push({retailer:retailer.name,productUrl:source.productUrl,model});
+    }catch(e){gaps.add(e.message);observe('source_lookup_error',{retailer:retailer.name,productUrl:source.productUrl,code:e.message});}
+   }
+  }
+ }
  if(!offers.length){
-  gaps.add('verifiedSourceOfferMissing');gaps.add('otherRetailerAdaptersUnavailable');
+  gaps.add('verifiedSourceOfferMissing');
   if(market&&sourceQuotes.length)try{const research=await marketEvidence(readClient,{kreamId:candidate.kreamId,option:''},market);observe('market_research',{productId:candidate.kreamId,...research});}catch(e){if(fatalCollectionError(e))throw e;gaps.add(e.message);}
   else if(!sourceQuotes.length)gaps.add('deepMarketCollectionDeferredUntilSourceFound');
  }
  for(const o of observations)for(const gap of o.payload.missingFields||[])gaps.add(gap);
- observe('collection_summary',{productId:candidate.kreamId,offers,sourceQuotes,gaps:[...gaps],retailersSearched:['musinsa'],searchQueries:models,checkedSources,coverage:'First search page; up to 3 source products and 3 matched options. Other retailers are not connected.',durationMs:Date.now()-started,requestTimings});
+ observe('collection_summary',{productId:candidate.kreamId,offers,sourceQuotes,gaps:[...gaps],retailersSearched,searchQueries:models,checkedSources,coverage:'First search page; up to 3 Musinsa products and 3 matched options; up to 3 public quotes per additional retailer. Public quotes do not confirm option stock or checkout benefits.',durationMs:Date.now()-started,requestTimings});
  const packet={version:'cream-product-packet-v1',productId:candidate.kreamId,candidate,offers,sourceQuotes,collectedAt:new Date().toISOString(),observations,gaps:[...gaps],collectionStatus:offers.length?(gaps.size?'partial':'collected'):'partial'};
  return {...packet,id:digest(packet)};
 }
