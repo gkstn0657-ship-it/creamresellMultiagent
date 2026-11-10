@@ -125,7 +125,7 @@ export async function control(name,args={},options={}) {
     if(['collecting','judging','starting'].includes(state.status)&&!workerAlive)return {...state,storedStatus:state.status,status:'needs_attention',error:'WORKER_NOT_RUNNING',workerAlive};
     return {...state,workerAlive};
   }
-  const judgments=path.join(dir,'judgments'),ids=fs.existsSync(judgments)?fs.readdirSync(judgments).filter(n=>/^\d+$/.test(n)):[];
+  const judgments=path.join(dir,'judgments'),ids=fs.existsSync(judgments)?fs.readdirSync(judgments).filter(n=>/^(?:\d{1,12}|poizon-\d{1,18})$/.test(n)):[];
   if(name==='cream_batch_stop'){
     const launchInfo=JSON.parse(fs.readFileSync(path.join(dir,'launch.json'),'utf8'));if(launchInfo.workId)await withWorkLock(root,()=>stopWork(root,launchInfo.workId));
     fs.writeFileSync(path.join(dir,'STOP'),'requested');for(const id of ids)fs.writeFileSync(path.join(judgments,id,'STOP'),'requested');return {stopRequested:true,runId:args.runId};

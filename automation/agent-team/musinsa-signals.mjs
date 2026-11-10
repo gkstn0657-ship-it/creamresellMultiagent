@@ -23,13 +23,13 @@ export function musinsaSignals(observations=[]) {
   const latest=new Map();
   for(const o of observations)if(o.active!==false&&['no1_product','collection_error'].includes(o.kind)) {
     const r=o.payload?.request;if(!r)continue;
-    const key=JSON.stringify([r.kreamId,r.productUrl,r.color,r.option]);
+    const key=JSON.stringify([r.market||'kream',r.poizonId||r.kreamId,r.productUrl,r.color,r.option]);
     if(!latest.has(key)||Date.parse(o.observedAt)>=Date.parse(latest.get(key).observedAt))latest.set(key,o);
   }
   return [...latest.values()].map(o=>{
     if(o.kind==='collection_error')return {observationId:o.id||null,productId:o.payload.request.kreamId,observedAt:o.observedAt,status:'collection_failed',error:o.payload.code,stock:null,rows:[],purchaseAuthorized:false};
     const p=o.payload,s=buildMarketSchema(o),research=p.marketResearch||{};
-    return {observationId:o.id||null,productId:s.productId,sourceUrl:s.sourceUrl,sourceOption:s.sourceOption,observedAt:o.observedAt,
+    return {observationId:o.id||null,platform:s.platform||'kream',marketProductId:s.marketProductId||s.productId,productId:s.productId,sourceUrl:s.sourceUrl,sourceOption:s.sourceOption,observedAt:o.observedAt,marketChecks:p.marketChecks||null,
       sourceModelVerified:p.identity?.sourceModelVerified===true,marketModelVerified:p.identity?.marketModelIndependentlyVerified===true,
       stock:{quantity:p.stock?.selectedStockQuantity??null,available:p.stock?.selectedOption?.isAvailable??null},
       marginInputs:s.inputs,purchaseMatchesSourceQuote:s.purchaseMatchesSourceQuote,
@@ -38,7 +38,7 @@ export function musinsaSignals(observations=[]) {
         const trades=selected&&sizeKey(selected)===sizeKey(r.size)?research.selectedTrades:research.trades;
         return {size:r.size,sourceOptionMatched:r.sourceOptionMatched,referenceOnly:!r.sourceOptionMatched,
           margins:Object.fromEntries(Object.entries(r.margins).map(([mode,m])=>[mode,{salePrice:m.salePrice,amount:m.marginAmount,rate:m.marginRate,status:m.status,source:m.source,feeEventVerified:m.feeEventVerified??false}])),
-          sales30d:{count:r.expectedSales30d,status:r.salesStatus,estimated:r.salesIsEstimated,basis:r.salesBasis},recent:recentSales(trades,r.size)};
+          sales30d:{count:r.expectedSales30d,status:r.salesStatus,estimated:r.salesIsEstimated,basis:r.salesBasis,...(s.platform==='poizon'?{region:'GLOBAL',localSellerCount:r.localSales30d,localRegion:'LOCAL'}:{})},recent:s.platform==='poizon'?r.recent:recentSales(trades,r.size),...(s.platform==='poizon'?{localRecent:r.localRecent}:{})};
       }),purchaseAuthorized:false};
   });
 }
@@ -48,12 +48,12 @@ export function saveMusinsaSignals(store) {
   const sources=store.data.observations.filter(o=>o.active!==false&&['no1_product','collection_error'].includes(o.kind));
   const sourceIds=sources.map(o=>o.id);
   const old=store.data.observations.findLast(o=>o.active!==false&&o.kind==='musinsa_screening_signals');
-  if(old?.payload.version===1&&JSON.stringify(old.payload.sourceIds)===JSON.stringify(sourceIds))return old;
+  if(old?.payload.version===2&&JSON.stringify(old.payload.sourceIds)===JSON.stringify(sourceIds))return old;
   if(old)old.active=false;
   return store.observe('musinsa_screening_signals',{
-    version:1,sourceIds,calculationSource:'deterministic_from_saved_no1_records',
+    version:2,sourceIds,calculationSource:'deterministic_from_saved_no1_records',
     method:{margin:'No1 formula or directly displayed value; see per-mode source and marginInputs',
-      recent:'Per exact market-size label, (end-7d,end] vs (end-14d,end-7d]; count records and median prices. end is saved trade windowEnd. No direction claim without complete 14-day coverage.',
+      recent:'KREAM: per-size individual record counts and median prices. POIZON: per-SKU daily aggregate counts and count-weighted chart prices; GLOBAL and LOCAL separately. No direction claim without complete 14-day coverage. Missing/abbreviated table counts stay unknown.',
       stock:'Selected source option only; zero and unknown preserved'},
     signals:musinsaSignals(sources)
   },{mode:sources.length&&sources.every(o=>o.mode==='live')?'live':'replay',observedAt:sources.length?new Date(Math.min(...sources.map(o=>Date.parse(o.observedAt)))).toISOString():new Date().toISOString()});

@@ -8,6 +8,7 @@ import {digest} from './store.mjs';
 import {writeJsonAtomic as write} from './atomic-json.mjs';
 import {marginReport} from './margin-report.mjs';
 import {marketSchemas} from './market-schema.mjs';
+import {offerProductId,safeProductId} from './market-offer.mjs';
 const packetSnapshot=(dir,id)=>path.join(dir,'packets',`snapshot-${id}.json`);
 function saveCollection(dir,groups,packets){
  // Immutable snapshots let an interrupted refresh keep the previous manifest usable.
@@ -38,7 +39,7 @@ export async function runBatch({seeds,dir,concurrency=2,collect,collectDiscovere
   const lock=path.join(dir,'batch.lock');
   if(fs.existsSync(lock)){const pid=Number(fs.readFileSync(lock,'utf8'));let alive=false;try{process.kill(pid,0);alive=true;}catch{}if(alive)throw Error('BATCH_ALREADY_RUNNING');fs.unlinkSync(lock);}
   fs.writeFileSync(lock,String(process.pid),{flag:'wx'});
-  const stopTimer=setInterval(()=>{if(!stop())return;const base=path.join(dir,'judgments');if(fs.existsSync(base))for(const id of fs.readdirSync(base).filter(n=>/^\d+$/.test(n)))fs.writeFileSync(path.join(base,id,'STOP'),'batch stop');},1000);
+  const stopTimer=setInterval(()=>{if(!stop())return;const base=path.join(dir,'judgments');if(fs.existsSync(base))for(const id of fs.readdirSync(base).filter(safeProductId))fs.writeFileSync(path.join(base,id,'STOP'),'batch stop');},1000);
   const state={version:'cream-product-batch-v1',mode,analysisProfile,status:'collecting',productCount:groups.length,collected:0,judged:0,results:[],startedAt:new Date().toISOString()};
   const emit=e=>{onEvent(e);};
   try {
@@ -53,7 +54,7 @@ export async function runBatch({seeds,dir,concurrency=2,collect,collectDiscovere
       saveCollection(dir,groups,packets);
       const refreshIds=new Set(mode==='live'?packets.filter(p=>!completed(savedJudgment(dir,p),p)&&p.observations.some(o=>o.kind!=='catalog_candidate'&&Date.now()-Date.parse(o.observedAt)>600000)).map(p=>p.productId):[]);
       if(refreshIds.size){
-        const refreshed=await collectPackets(seeds.filter(seed=>refreshIds.has(seed.kreamId)),path.join(dir,'packets'),{collect,collectDiscovered,mode,stopped:stop,onEvent:emit});
+        const refreshed=await collectPackets(seeds.filter(seed=>refreshIds.has(offerProductId(seed))),path.join(dir,'packets'),{collect,collectDiscovered,mode,stopped:stop,onEvent:emit});
         packets=packets.map(p=>refreshed.find(fresh=>fresh.productId===p.productId)||p);
       }
     }else packets=await collectPackets(seeds,path.join(dir,'packets'),{collect,collectDiscovered,mode,stopped:stop,onEvent:e=>{state.collected=e.collected;write(stateFile,state);emit(e);}});

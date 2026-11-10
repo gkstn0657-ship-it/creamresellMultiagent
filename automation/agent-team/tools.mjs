@@ -21,7 +21,7 @@ export const TOOL_DEFINITIONS=[
   def('collect_no1','Collect the scoped product through the authenticated background No1 adapter. May use an isolated guest cart internally. Never opens a UI or purchases.',schema({refreshReason:str})),
   def('investigate','Choose a collection operation for the current product only. Arguments are JSON encoded. market_page:{pid}; bind_identity:{pid,model,title,quote,file}; search_sources:{pid,query}; catalog_page:{pid,catalogIndex}; inspect_offer:{offerId}; read_evidence:{file,offset?,length?}. No desktop UI. Do not repeat an authentication failure.',schema({operation:{type:'string',enum:['market_page','bind_identity','search_sources','catalog_page','inspect_offer','read_evidence']},arguments:str})),
   def('calculate_scenario','Compute per-unit and quantity cash/economic profit. All costs are per unit; discounts already included in purchaseBeforePoints. null means unknown. Assumptions and evidence IDs must be explicit; this tool makes no adoption decision.',schema({purchaseBeforePoints:num,existingPointsSpent:num,inboundShipping:num,salePrice:num,sellerFeeRate:num,sellerFixedFee:num,outboundShipping:num,newPointsExpected:num,quantity:{type:'integer'},basis:arr,assumptions:arr})),
-  def('request_review','Product owner submits its exact proposed judgment for independent review. Routine review uses Luna; adopt or complex/conflicting cases use Sol high. Publish exactly this reviewed proposal afterward.',schema({question:str,proposal:proposalSchema,needsDeepReview:{type:'boolean'}})),
+  def('request_review','Product owner submits its exact proposed judgment for independent review. Hold/exclude reviews use Luna; only adopt candidates use Sol high for final verification. Publish exactly this reviewed proposal afterward.',schema({question:str,proposal:proposalSchema,needsDeepReview:{type:'boolean'}})),
   def('record_review','Independent reviewer only. Record source verification and inconsistencies; pass is not a profitability or purchase approval.',schema({verdict:{type:'string',enum:['pass','rework']},issues:arr,basis:arr})),
   def('publish_assessment','Product owner only. Persist AI adoption/hold/exclude judgment with a current independent review. Unknown facts remain visible; never purchases.',schema({decision:{type:'string',enum:['adopt','hold','exclude']},reason:str,basis:arr,unresolved:arr,reviewId:str})),
 ];
@@ -34,7 +34,7 @@ export class TeamTools {
     this.initialCalls=store.data.toolCalls;
     const evidenceDir=path.join(store.dir,'evidence');fs.mkdirSync(evidenceDir,{recursive:true});
     const seed=store.data.mission?.product;
-    for(const [name,value] of Object.entries({'k50-ids.json':seed?[seed.kreamId]:[],'k50.json':[],'n-cards.json':{},'n-cat.json':{},'agent-policy.json':{}}))if(!fs.existsSync(path.join(evidenceDir,name)))fs.writeFileSync(path.join(evidenceDir,name),JSON.stringify(value));
+    for(const [name,value] of Object.entries({'k50-ids.json':seed?.kreamId?[seed.kreamId]:[],'k50.json':[],'n-cards.json':{},'n-cat.json':{},'agent-policy.json':{}}))if(!fs.existsSync(path.join(evidenceDir,name)))fs.writeFileSync(path.join(evidenceDir,name),JSON.stringify(value));
     this.sourcing=new SourcingTools(evidenceDir,{mode:replay?'replay':'live',relayDir,config:{maxPagesPerRun:16,maxNo1Queries:10,pageTimeoutMs:60000,freshnessMinutes:10},stopFile:path.join(store.dir,'STOP')});
   }
   async execute(p) {

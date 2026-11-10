@@ -12,7 +12,7 @@ export const workPolicy={scopeMode:'ask-user-per-work',dailyLimit:null,maxBatchP
 export function workOrders(root){const dir=orderDir(root);return fs.existsSync(dir)?fs.readdirSync(dir).filter(n=>/^work-[a-f0-9-]{36}\.json$/.test(n)).map(n=>read(path.join(dir,n))).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)):[];}
 export function workSummary(root,work){
  if(!work)return {status:'awaiting_user_scope',policy:workPolicy,requiredQuestion:'이번 작업에서 상품을 몇 개 탐색할까요?'};
- const entries=work.entries.map(e=>{const dir=path.join(root,e.runId),state=read(path.join(dir,'batch-state.json')),proc=read(path.join(dir,'process.json'));return {...e,status:state?.status||'starting',workerAlive:alive(proc?.pid),judged:state?.judged||0,qualifiedProductIds:(state?.results||[]).filter(r=>r.status==='complete'&&r.assessment?.decision==='adopt'&&r.assessment?.reviewId&&r.qualification?.passed===true).map(r=>r.productId)};});
+ const entries=work.entries.map(e=>{const dir=path.join(root,e.runId),state=read(path.join(dir,'batch-state.json')),proc=read(path.join(dir,'process.json'));return {...e,status:state?.status||'starting',workerAlive:alive(proc?.pid),judged:state?.judged||0,qualifiedProductIds:(state?.results||[]).filter(r=>r.status==='complete'&&r.assessment?.decision==='adopt'&&r.assessment?.reviewId&&r.qualification?.passed===true).map(r=>r.qualification.canonicalProductId||r.productId)};});
  const reserved=entries.reduce((n,e)=>n+e.productCount,0),activeRunIds=entries.filter(e=>e.workerAlive&&!['complete','stopped','needs_attention','prefetching','prefetched'].includes(e.status)).map(e=>e.runId);
  const qualifiedProductIds=[...new Set(entries.flatMap(e=>e.qualifiedProductIds))];
  const profitTarget=work.scopeMode==='profitable-results';
@@ -71,7 +71,7 @@ export function stopWork(root,workId){
  const work=workOrders(root).find(w=>w.id===workId);if(!work)throw Error('WORK_NOT_FOUND');
  work.status='stopped';writeJsonAtomic(path.join(orderDir(root),work.id+'.json'),work);
  const explorationDir=path.join(root,'explorations',work.id);if(fs.existsSync(explorationDir))fs.writeFileSync(path.join(explorationDir,'STOP'),'work stopped');
- for(const e of work.entries){const dir=path.join(root,e.runId);if(!fs.existsSync(dir))continue;fs.writeFileSync(path.join(dir,'STOP'),'work stopped');const j=path.join(dir,'judgments');if(fs.existsSync(j))for(const id of fs.readdirSync(j).filter(n=>/^\d+$/.test(n)))fs.writeFileSync(path.join(j,id,'STOP'),'work stopped');}
+ for(const e of work.entries){const dir=path.join(root,e.runId);if(!fs.existsSync(dir))continue;fs.writeFileSync(path.join(dir,'STOP'),'work stopped');const j=path.join(dir,'judgments');if(fs.existsSync(j))for(const id of fs.readdirSync(j).filter(n=>/^(?:\d{1,12}|poizon-\d{1,18})$/.test(n)))fs.writeFileSync(path.join(j,id,'STOP'),'work stopped');}
  return workSummary(root,work);
 }
 export function reopenWork(root,workId){

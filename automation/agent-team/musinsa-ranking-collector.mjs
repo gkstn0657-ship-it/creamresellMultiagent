@@ -3,6 +3,8 @@ import {matchMarketSize,sizeKey} from '../no1-background/size-binding.mjs';
 import {buildMarketSchema} from './market-schema.mjs';
 import {sameColor} from './discovery-collector.mjs';
 import {makePacket,validatePacket} from './packets.mjs';
+import {collectPoizonCandidate} from './poizon-ranking-collector.mjs';
+import {isProductLookupFailure} from './source-recovery.mjs';
 const modelKey=s=>String(s||'').trim().toUpperCase().replace(/\s+/g,'');
 const codes=s=>String(s||'').split('/').map(modelKey).filter(s=>s&&s!=='-');
 const available=o=>Number.isSafeInteger(o.limitedQty)&&o.limitedQty>0&&o.isAvailable!==false;
@@ -26,7 +28,7 @@ export function rankingSizeMatch(stock,market,sourceSize){
   };
   return null;
 }
-export async function collectRankingCandidate(candidate,{client,onEvidence=()=>{},seenKreamIds=new Set()}={}){
+export async function collectKreamCandidate(candidate,{client,onEvidence=()=>{},seenKreamIds=new Set()}={}){
   const cache=new Map();const cached={status:()=>client.status(),request:async(cmd,payload={})=>{
     const key=JSON.stringify([cmd,payload]);if(!cache.has(key)){const data=await client.request(cmd,payload);cache.set(key,data);await onEvidence(cmd,payload,data);}return structuredClone(cache.get(key));
   }};
@@ -76,14 +78,48 @@ export async function collectRankingCandidate(candidate,{client,onEvidence=()=>{
   }
   return {status:'collected',kreamId:id,packet:validatePacket(makePacket({productId:id,offers},observations))};
 }
+// One source product -> one AI judgment, with independent platform evidence.
+// The shared cache avoids repeating stock/benefit reads. Existing ranking order
+// and persistent source position are unchanged.
+export async function collectRankingCandidate(candidate,{client,onEvidence=()=>{},seenKreamIds=new Set()}={}){
+ const cache=new Map(),failures=new Map();let lastCommand=null;
+ const cached={status:()=>client.status(),request:async(cmd,payload={})=>{
+  lastCommand=cmd;const key=JSON.stringify([cmd,payload]);
+  if(failures.has(key))throw failures.get(key);
+  if(!cache.has(key)){try{const data=await client.request(cmd,payload);cache.set(key,data);await onEvidence(cmd,payload,data);}catch(e){failures.set(key,e);throw e;}}
+  return structuredClone(cache.get(key));
+ }};
+ const checks={};
+ for(const [platform,collect] of [['kream',collectKreamCandidate],['poizon',collectPoizonCandidate]]){
+  try{checks[platform]=await collect(candidate,{client:cached,seenKreamIds});}
+  catch(e){
+   const mismatch=lastCommand?.startsWith('market:poizon:')&&['POIZON_PRICE_NOT_FOUND','NO1_IDENTITY_MISMATCH','NO1_OPTION_NOT_FOUND'].includes(e.message);
+   if((!mismatch&&!isProductLookupFailure(lastCommand,e.message))||['stock:check','musinsa:product:benefit'].includes(lastCommand))throw e;
+   checks[platform]={status:'skipped',reason:e.message,lookupFailed:!mismatch,cmd:lastCommand};
+  }
+  if(['NO_AVAILABLE_STOCK','SOURCE_MODEL_MISSING','UNSUPPORTED_SOURCE_MODEL_FORMAT'].includes(checks[platform].reason))return checks[platform];
+ }
+ const collected=Object.values(checks).filter(c=>c.status==='collected');
+ if(!collected.length){const failure=Object.values(checks).find(c=>c.lookupFailed);return {status:'skipped',reason:failure?.reason||'NO_MARKET_QUALIFYING_OPTION',lookupFailed:!!failure,marketChecks:checks};}
+ const id=checks.kream.packet?.productId||checks.poizon.packet.productId;
+ const marketChecks=Object.fromEntries(Object.entries(checks).map(([k,v])=>[k,{status:v.status,reason:v.reason||null,lookupFailed:v.lookupFailed===true}]));
+ const observations=collected.flatMap(c=>c.packet.observations).map(o=>{
+  const observation=structuredClone(o);observation.payload.marketChecks=marketChecks;observation.payload.canonicalProductId=checks.kream.kreamId||id;
+  if(observation.payload.request.market==='poizon'&&checks.kream.packet)observation.payload.request.productGroupId=id;
+  return observation;
+ });
+ const offers=observations.map(o=>o.payload.request);
+ return {status:'collected',kreamId:checks.kream.packet?.productId||null,poizonId:checks.poizon.poizonId||null,marketKeys:[...(checks.kream.packet?[checks.kream.packet.productId]:[]),...(checks.poizon.poizonId?[`poizon-${checks.poizon.poizonId}`]:[])],packet:validatePacket(makePacket({productId:id,offers},observations))};
+}
 export function qualifyRankingResult(result,packet){
   const checks={adopted:result.status==='complete'&&result.assessment?.decision==='adopt',independentReview:Boolean(result.assessment?.reviewId),matchedStockMarginSales:false};
   const eligible=[];
   for(const o of packet.observations.filter(o=>o.kind==='no1_product')){
     const p=o.payload;if(!p.identity?.marketModelIndependentlyVerified||p.stock?.selectedOption?.isAvailable===false)continue;
     const schema=buildMarketSchema(o);
-    for(const row of schema.rows)if(row.sourceOptionMatched&&row.stockQuantity>0&&row.salesStatus==='ok'&&row.expectedSales30d>0&&Object.entries(row.margins).some(([mode,m])=>mode!=='desired'&&m.marginAmount>0&&m.marginRate>0))eligible.push({size:row.size,sourceOption:p.request.option,stock:row.stockQuantity,expectedSales30d:row.expectedSales30d});
+    if(!schema.purchaseMatchesSourceQuote||schema.platform==='poizon'&&(schema.bidStatus===0||schema.cannotBidMessage))continue;
+    for(const row of schema.rows)if(row.sourceOptionMatched&&row.stockQuantity>0&&row.salesStatus==='ok'&&row.expectedSales30d>0&&Object.entries(row.margins).some(([mode,m])=>mode!=='desired'&&m.marginAmount>0&&m.marginRate>0))eligible.push({platform:schema.platform||'kream',marketProductId:p.request.poizonId||p.request.kreamId,size:row.size,sourceOption:p.request.option,stock:row.stockQuantity,expectedSales30d:row.expectedSales30d});
   }
   checks.matchedStockMarginSales=eligible.length>0;
-  return {passed:Object.values(checks).every(Boolean),checks,eligibleOptions:eligible,purchaseAuthorized:false};
+  return {passed:Object.values(checks).every(Boolean),checks,canonicalProductId:packet.observations.find(o=>o.kind==='no1_product')?.payload.canonicalProductId||packet.productId,eligibleOptions:eligible,purchaseAuthorized:false};
 }

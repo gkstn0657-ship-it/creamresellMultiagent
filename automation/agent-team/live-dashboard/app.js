@@ -17,6 +17,7 @@ const eventText=e=>{
  return e.type.replaceAll('_',' ');
 };
 const decisionText={adopt:'통과',hold:'보류',exclude:'제외',pending:'진행 중'};
+const marketLabel=r=>`${(r.qualifiedPlatforms?.length?r.qualifiedPlatforms:r.platforms?.length?r.platforms:[r.productId.startsWith('poizon-')?'poizon':'kream']).map(p=>p.toUpperCase()).join(' / ')} · ${r.productId}`;
 let snapshot=null,startBusy=false,startMessage='';
 function renderStart(data){
  const button=el('start-button');if(!button)return;
@@ -37,9 +38,9 @@ function renderResults(data){
  const list=el('results-list');list.replaceChildren();set('result-count',`${format(data.recent.length)}건 표시`);
  if(!data.recent.length){list.append(node('p','empty','아직 완료된 상품 판단이 없습니다.'));return;}
  const featured=data.featured||data.recent.find(r=>r.qualified);
- if(featured){const row=node('div','featured-result'),tag=node('span','featured-tag','✦ 검토 통과 후보'),link=node('a','',`KREAM #${featured.productId}`);link.href=featured.url;link.target='_blank';link.rel='noopener noreferrer';row.append(tag,link);list.append(row);}
+ if(featured){const row=node('div','featured-result'),tag=node('span','featured-tag','✦ 검토 통과 후보'),link=node('a','',marketLabel(featured));if(featured.url)link.href=featured.url;link.target='_blank';link.rel='noopener noreferrer';row.append(tag,link);list.append(row);}
  for(const r of data.recent){
-  const row=node('div','result-row'),main=node('div','result-main'),link=node('a','',`KREAM #${r.productId}`);
+  const row=node('div','result-row'),main=node('div','result-main'),link=node('a','',marketLabel(r));
   if(r.url){link.href=r.url;link.target='_blank';link.rel='noopener noreferrer';}main.append(link,node('small','',r.reason||'판단 근거가 저장돼 있습니다.'));
   const right=node('div','result-right');if(r.reviewed)right.append(node('span','review-check','✓ 독립 검토'));
   right.append(node('span',`decision ${r.decision}`,r.qualified?'수익 후보':decisionText[r.decision]||r.decision));row.append(main,right);list.append(row);

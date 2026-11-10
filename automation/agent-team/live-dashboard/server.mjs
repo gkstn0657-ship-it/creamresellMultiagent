@@ -48,7 +48,7 @@ export function liveDashboardData(root=defaultRoot,workId){
    if(row.assessment?.decision==='adopt')adopted++;
    if(row.assessment?.decision==='hold')held++;
    if(row.assessment?.decision==='exclude')excluded++;
-   recent.push({productId:String(row.productId||''),decision:row.assessment?.decision||'pending',reviewed:!!row.assessment?.reviewId,qualified:row.qualification?.passed===true,at:row.assessment?.at||data?.finishedAt||null,reason:firstLine(row.assessment?.reason),url:/^\d{1,12}$/.test(String(row.productId||''))?`https://kream.co.kr/products/${row.productId}`:null});
+   recent.push({platforms:[...new Set((row.marketSchemas||[]).map(s=>s.platform||'kream'))],qualifiedPlatforms:[...new Set((row.qualification?.eligibleOptions||[]).map(o=>o.platform||'kream'))],productId:String(row.productId||''),decision:row.assessment?.decision||'pending',reviewed:!!row.assessment?.reviewId,qualified:row.qualification?.passed===true,at:row.assessment?.at||data?.finishedAt||null,reason:firstLine(row.assessment?.reason),url:/^\d{1,12}$/.test(String(row.productId||''))?`https://kream.co.kr/products/${row.productId}`:null});
   }
  }
  recent.sort((a,b)=>String(b.at).localeCompare(String(a.at)));
@@ -77,7 +77,7 @@ export async function startDashboardWork({root,workId,client=new BackgroundClien
   reopenWork(root,workId);
   for(const file of [path.join(dir,'STOP'),...work.entries.map(e=>path.join(root,e.runId,'STOP'))])if(fs.existsSync(file))fs.unlinkSync(file);
   for(const entry of work.entries){const judgments=path.join(root,entry.runId,'judgments');if(!fs.existsSync(judgments))continue;
-   for(const name of fs.readdirSync(judgments).filter(n=>/^\d+$/.test(n))){const file=path.join(judgments,name,'STOP');if(fs.existsSync(file))fs.unlinkSync(file);}}
+   for(const name of fs.readdirSync(judgments).filter(n=>/^(?:\d{1,12}|poizon-\d{1,18})$/.test(n))){const file=path.join(judgments,name,'STOP');if(fs.existsSync(file))fs.unlinkSync(file);}}
  });
  const result=await continueWork('cream_musinsa_work_continue',{workId},{root});
  let bridge;try{bridge=await client.status();}catch{return {ok:false,code:503,reason:'NO1_BRIDGE_UNAVAILABLE',workerStarted:result.launched===true||result.reused===true};}

@@ -6,9 +6,10 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {CodexServer} from './app-server.mjs';
 import {TeamStore,proposalHash,digest} from './store.mjs';
 import {TeamTools,ownerTools,reviewTools} from './tools.mjs';
-import {OWNER,REVIEWER,MODELS} from './roles.mjs';
+import {OWNER,REVIEWER,MODELS,reviewModel} from './roles.mjs';
 import {startEvidenceServer} from './evidence-server.mjs';
 import {validatePacket} from './packets.mjs';
+import {offerProductId} from './market-offer.mjs';
 const ROOT=fileURLToPath(new URL('../../',import.meta.url));
 export async function runTeam({dir,mission,packet=null,resume=false,replay=null,message=null,timeoutMs=300000,onEvent=()=>{},serverFactory=options=>new CodexServer(options)}={}) {
   dir=path.resolve(dir);fs.mkdirSync(dir,{recursive:true});
@@ -23,7 +24,7 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
   const store=new TeamStore(dir,mission),actors=store.data.actors;
   if(packet&&store.data.packetId!==packet.id){
     validatePacket(packet);
-    if(packet.productId!==store.data.mission?.product?.kreamId)throw Error('PACKET_MISSION_MISMATCH');
+    if(packet.productId!==offerProductId(store.data.mission?.product||{}))throw Error('PACKET_MISSION_MISMATCH');
     store.data.packetId=packet.id;
     store.data.packetMode=packet.observations.every(x=>x.mode!=='live')?'offline':'live';
     store.data.assessment=null;
@@ -62,7 +63,7 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
     requestReview:async(question,proposal,needsDeepReview)=>{
       if(reviewsThisTurn++>=3)throw Error('REVIEW_BUDGET_REACHED');
       const before=store.basis();
-      const selected=proposal.decision==='adopt'||needsDeepReview||store.data.reviews.at(-1)?.verdict==='rework'?MODELS.deepReviewer:MODELS.reviewer;
+      const selected=reviewModel(proposal);
       const response=await server.startThread({instructions:reviewInstructions,tools:reviewTools,...selected,config:{'agents.enabled':false,'mcp_servers.cream_evidence.enabled':false}});
       const threadId=response.thread.id;actor(threadId,'reviewer');
       const ids=[...store.data.observations,...store.data.calculations].filter(x=>x.active!==false).map(x=>x.id);

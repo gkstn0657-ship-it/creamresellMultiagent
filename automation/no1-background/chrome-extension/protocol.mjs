@@ -1,17 +1,19 @@
 import {projectHistory,projectMarginSettings,projectDisplayedSchema} from './schema-data.mjs';
 import {validRankingRequest,projectRankingSettings,projectRankingProducts} from './ranking-data.mjs';
+import {POIZON_COMMANDS,validPoizonRequest,projectPoizon} from './poizon-data.mjs';
 export const RELAY_URL = 'wss://relay.certi.life/ws/v2';
 export const CLIENT_VERSION = '1.35.8';
 // Wire protocol version; compatible package-only fixes can have a newer manifest version.
 export const CONNECTOR_VERSION = '0.8.0';
-export const PRODUCT_COMMANDS = Object.freeze(['musinsa:ranking:settings','musinsa:ranking:products','mecro:inventory:search', 'stock:check', 'market:kream:prices', 'market:kream:details', 'market:kream:trades', 'market:kream:askPreviewBatch', 'market:kream:history:start', 'market:kream:displayed-schema', 'musinsa:product:benefit']);
-export const COMMANDS = Object.freeze(['stock:supportedSites', 'musinsa:ranking:check-login', 'settings:get', 'platform:status', 'market:margin-settings', ...PRODUCT_COMMANDS]);
+export const PRODUCT_COMMANDS = Object.freeze([...POIZON_COMMANDS,'musinsa:ranking:settings','musinsa:ranking:products','mecro:inventory:search', 'stock:check', 'market:kream:prices', 'market:kream:details', 'market:kream:trades', 'market:kream:askPreviewBatch', 'market:kream:history:start', 'market:kream:displayed-schema', 'musinsa:product:benefit']);
+export const COMMANDS = Object.freeze(['connector:session-status','stock:supportedSites', 'musinsa:ranking:check-login', 'settings:get', 'platform:status', 'market:margin-settings', ...PRODUCT_COMMANDS]);
 const errorCodes = new Set(['NO_ELECTRON_CONNECTED', 'ELECTRON_DISCONNECTED', 'ELECTRON_OFFLINE', 'ELECTRON_SEND_FAILED', 'RECONNECTING', 'CMD_NOT_FOUND', 'REMOTE_COMMAND_FORBIDDEN', 'MAINTENANCE', 'TIMEOUT', 'NO1_AUTH_REQUIRED', 'NO1_WEB_TAB_REQUIRED', 'NO1_MULTIPLE_WEB_SESSIONS', 'NO1_BROWSER_ACCESS_FAILED', 'NO1_RELAY_CONNECTION_FAILED', 'NO1_RELAY_CLOSED', 'NO1_RELAY_TIMEOUT', 'NO1_INVALID_RESPONSE', 'NO1_COMMAND_FORBIDDEN', 'NO1_INVALID_PAYLOAD', 'NO1_BRIDGE_TIMEOUT', 'NO1_BRIDGE_DISCONNECTED', 'NO1_BRIDGE_BUSY', 'NO1_CONNECTION_STOPPED', 'NO1_BRIDGE_NOT_CONFIGURED', 'NO1_BRIDGE_UNAVAILABLE', 'NO1_INVALID_BRIDGE_CONFIG', 'NO1_PRODUCT_QUERIES_UNVERIFIED']);
 
 export function safeCode(code) { return errorCodes.has(code) ? code : 'NO1_REMOTE_ERROR'; }
 for (const code of ['NO1_BACKGROUND_MODE_REQUIRED', 'NO1_PLATFORM_LOGIN_REQUIRED', 'NO1_IDENTITY_MISMATCH', 'NO1_OPTION_NOT_FOUND', 'NO1_CONNECTOR_UPDATE_REQUIRED', 'MUSINSA_LOGIN_REQUIRED', 'MUSINSA_BENEFIT_FETCH_FAILED', 'STOCK_CHECK_FAILED', 'KREAM_LOGIN_REQUIRED', 'KREAM_TOKEN_EXPIRED', 'NO1_UPSTREAM_LOOKUP_FAILED']) errorCodes.add(code);
 errorCodes.add('NO1_RANKING_SETTINGS_UNAVAILABLE');
 errorCodes.add('MUSINSA_RANKING_ERROR');
+for(const code of ['POIZON_LOGIN_REQUIRED','POIZON_API_ERROR','POIZON_PRICE_NOT_FOUND'])errorCodes.add(code);
 const id = value => typeof value === 'string' && /^\d{1,12}$/.test(value);
 errorCodes.add('KREAM_SEARCH_FAILED');
 for(const code of ['NO1_SCHEMA_AMBIGUOUS','NO1_SCHEMA_NOT_AVAILABLE','NO1_HISTORY_TIMEOUT'])errorCodes.add(code);
@@ -20,7 +22,8 @@ export function validateCommand(cmd, payload) {
   if (!COMMANDS.includes(cmd)) throw Error('NO1_COMMAND_FORBIDDEN');
   if (!payload || Array.isArray(payload) || typeof payload !== 'object') throw Error('NO1_INVALID_PAYLOAD');
   let valid;
-  if (cmd === 'musinsa:ranking:products') valid = validRankingRequest(payload);
+  if (POIZON_COMMANDS.includes(cmd)) valid=validPoizonRequest(cmd,payload);
+  else if (cmd === 'musinsa:ranking:products') valid = validRankingRequest(payload);
   else if (cmd === 'mecro:inventory:search') valid = keys(payload, ['keyword','cursor'], ['keyword','cursor']) && (payload.keyword === ' ' || typeof payload.keyword === 'string' && payload.keyword.trim() === payload.keyword && /^[\p{L}\p{N}][\p{L}\p{N} ._()/+-]{0,99}$/u.test(payload.keyword)) && typeof payload.cursor === 'string' && /^\d{1,12}$/.test(payload.cursor);
   else if (cmd === 'stock:check') valid = keys(payload, ['url'], ['url']) && typeof payload.url === 'string' && /^https:\/\/www\.musinsa\.com\/products\/\d{1,12}$/.test(payload.url);
   else if (cmd === 'market:kream:prices') valid = keys(payload, ['productCode', 'size'], ['productCode']) && id(payload.productCode) && (payload.size === undefined || typeof payload.size === 'string' && payload.size.length > 0 && payload.size.length <= 64 && payload.size.trim() === payload.size && !/[\x00-\x1f]/.test(payload.size));
@@ -30,7 +33,7 @@ export function validateCommand(cmd, payload) {
   else if (cmd === 'market:kream:trades') valid = keys(payload, ['productCode', 'cursor', 'size'], ['productCode', 'cursor']) && id(payload.productCode) && typeof payload.cursor === 'string' && /^[A-Za-z0-9_=-]{1,200}$/.test(payload.cursor) && (payload.size === undefined || typeof payload.size === 'string' && /^[A-Za-z0-9._() /-]{1,64}$/.test(payload.size));
   else if (cmd === 'market:kream:askPreviewBatch') valid = keys(payload, ['productCode','items'], ['productCode','items']) && id(payload.productCode) && Array.isArray(payload.items) && payload.items.length > 0 && payload.items.length <= 3 && payload.items.every(x => x && keys(x,['option','price','isInstant'],['option','price','isInstant']) && typeof x.option === 'string' && /^[A-Za-z0-9._() /-]{1,64}$/.test(x.option) && Number.isSafeInteger(x.price) && x.price > 0 && x.price <= 100000000 && typeof x.isInstant === 'boolean');
   else if (cmd === 'musinsa:product:benefit') valid = keys(payload, ['productId'], ['productId']) && id(payload.productId);
-  else if (cmd === 'platform:status') valid = keys(payload, ['platform'], ['platform']) && payload.platform === 'kream';
+  else if (cmd === 'platform:status') valid = keys(payload, ['platform'], ['platform']) && ['kream','poizon'].includes(payload.platform);
   else valid = Object.keys(payload).length === 0;
   if (!valid) throw Error('NO1_INVALID_PAYLOAD');
 }
@@ -46,6 +49,8 @@ function safeTree(value, depth = 0) {
 }
 export function projectData(cmd, data, payload = {}) {
   if (!data || typeof data !== 'object') throw Error('NO1_INVALID_RESPONSE');
+  if(cmd==='connector:session-status')return {...Object.fromEntries(['tabCount','mainTabCount','inspectedTabCount','authenticatedTabCount','distinctSessionCount'].map(k=>[k,numberOrNull(data[k])])),error:data.error?safeCode(data.error):null};
+  if(POIZON_COMMANDS.includes(cmd))return projectPoizon(cmd,data,payload);
   if(cmd==='musinsa:ranking:settings')return projectRankingSettings(data);
   if(cmd==='musinsa:ranking:products')return projectRankingProducts(data);
   if(cmd==='market:kream:history:start')return projectHistory(data,payload);
@@ -84,8 +89,8 @@ export function projectData(cmd, data, payload = {}) {
     return {previews,failures:data.failures.map(x=>({option:String(x.option||'').slice(0,64),code:String(x.code||'PREVIEW_FAILED').slice(0,100)}))};
   }
   if (cmd === 'platform:status') {
-    if (!Array.isArray(data.sessions) || data.sessions.length !== 1 || data.sessions[0].platform !== 'kream' || !['active', 'logged_out', 'requires_2fa'].includes(data.sessions[0].status)) throw Error('NO1_INVALID_RESPONSE');
-    return {sessions: [{platform: 'kream', status: data.sessions[0].status}]};
+    if (!Array.isArray(data.sessions) || data.sessions.length !== 1 || data.sessions[0].platform !== (payload.platform||'kream') || !['active', 'logged_out', 'requires_2fa'].includes(data.sessions[0].status)) throw Error('NO1_INVALID_RESPONSE');
+    return {sessions: [{platform: data.sessions[0].platform, status: data.sessions[0].status}]};
   }
   if (cmd === 'market:kream:prices') {
     if (!Array.isArray(data.prices) || data.prices.length > 1000) throw Error('NO1_INVALID_RESPONSE');

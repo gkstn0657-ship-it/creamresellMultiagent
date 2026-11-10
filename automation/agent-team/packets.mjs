@@ -1,15 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {digest} from './store.mjs';
-import {validateProbeArgs} from '../no1-background/product-probe.mjs';
+import {validateOffer,offerProductId} from './market-offer.mjs';
 import {createCollector} from './collector.mjs';
 import {validateCandidate} from './discovery-policy.mjs';
 import {collectCandidate} from './discovery-collector.mjs';
 export function groupProducts(seeds) {
   if(!Array.isArray(seeds)||!seeds.length||seeds.length>500)throw Error('PRODUCTS_REQUIRED');
   const groups=new Map(),seen=new Set();
-  for(const seed of seeds){seed.kind==='catalog-candidate'?validateCandidate(seed):validateProbeArgs(seed);const key=digest(seed);if(seen.has(key))continue;seen.add(key);
-    if(!groups.has(seed.kreamId))groups.set(seed.kreamId,[]);groups.get(seed.kreamId).push(seed);}
+  for(const seed of seeds){seed.kind==='catalog-candidate'?validateCandidate(seed):validateOffer(seed);const key=digest(seed);if(seen.has(key))continue;seen.add(key);
+    const id=offerProductId(seed);if(!groups.has(id))groups.set(id,[]);groups.get(id).push(seed);}
   return [...groups].map(([productId,offers])=>({productId,offers}));
 }
 export function makePacket(product,observations) {
@@ -22,7 +22,8 @@ export function makePacket(product,observations) {
 export function validatePacket(packet) {
   const {id,...body}=packet||{};
   if(body.version!=='cream-product-packet-v1'||id!==digest(body)||!Array.isArray(body.observations)||!body.observations.length)throw Error('PACKET_INTEGRITY_FAILED');
-  for(const offer of body.offers){validateProbeArgs(offer);if(offer.kreamId!==body.productId)throw Error('PACKET_PRODUCT_MISMATCH');}
+  for(const offer of body.offers){validateOffer(offer);if(offerProductId(offer)!==body.productId)throw Error('PACKET_PRODUCT_MISMATCH');
+    if(offer.productGroupId&&!body.offers.some(other=>other.kreamId===offer.productGroupId&&other.productUrl===offer.productUrl&&other.model===offer.model))throw Error('PACKET_PRODUCT_MISMATCH');}
   if(body.candidate){validateCandidate(body.candidate);if(body.candidate.kreamId!==body.productId)throw Error('PACKET_PRODUCT_MISMATCH');}
   if(!body.offers.length&&!body.candidate)throw Error('PACKET_PRODUCT_MISSING');
   for(const observation of body.observations){

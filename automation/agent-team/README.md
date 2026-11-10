@@ -1,5 +1,35 @@
 # Cream 상품별 Codex 에이전트 팀
 
+## 무신사 → KREAM·POIZON 검토 (2026-11-11)
+
+무신사 인기순 탐색은 저장된 순서와 중복 기록을 유지한다. 동일 매입처의 재고와
+최대혜택가를 공유하고 KREAM과 POIZON의 정확한 모델·색상·옵션을 각각 연결한다.
+KREAM 매칭이나 양수 마진이 없어도 POIZON을 확인한다. POIZON은 CN 최저입찰,
+별도 수수료 카테고리·최소/최대 수수료·세금 설정으로 마진을 계산한다.
+열려 있는 동일 상품 표에서 직접 읽은 값과 관측 조건의 계산값을 구분한다.
+
+글로벌/한국 판매자 30일 판매량과 SKU별 일별 차트는 구분해 저장한다. 약식 판매량,
+불명확한 사이즈 변환, 다른 매입가로 계산된 표, 재고 0, 입찰 불가 상품은 통과 근거로
+사용하지 않는다. 양쪽 판매처의 자료는 같은 상품 판단·독립 검토에 전달하고 한 번만
+집계한다. POIZON 전용 상품 ID는 `poizon-<spuId>`다. 중단 전 미예약 대기 패킷은
+10분이 지났으면 재조회한 뒤 검토한다.
+
+상품 담당은 Luna/high, 일반 검토는 Luna/medium, adopt 후보 최종 검증은
+Sol/high다. 탐색·감지·조율·커맨더는 결정적 코드이며 모델을 호출하지 않는다.
+
+Chrome 확장은 `automation/no1-background/chrome-extension`의 **0.9.1**을
+새로고침해야 세션 선택 수정과 POIZON 명령을 실행한다. 메인 소싱 탭의 최상위
+프레임만 인증 세션으로 사용하고, 서로 다른 메인 세션이 있으면 중단한다.
+`connector:session-status`는 탭/세션 개수와 오류 코드만 반환한다.
+토큰은 브라우저 밖으로 반환하지 않는다. 창 열기·탭 전환·클릭은 수행하지 않는다.
+
+검증 명령:
+```powershell
+node --test automation/no1-background/*.test.mjs automation/agent-team/*.test.mjs automation/agent-team/live-dashboard/*.test.mjs
+```
+이 검사는 계약·재시도·계산·옵션 연결·패킷/재개·AI 검토 경계의 자동 검사다.
+인증된 No1 실조회와 실제 상품 판단의 완료 여부는 별도로 확인해야 한다.
+
 새 PC 연결·인증·기존 작업/DB를 변경 없이 검사하려면
 `node automation/agent-team/preflight.mjs`를 실행한다. `localReady`는 로컬 전제만
 뜻하며 실상품 전체 흐름 검증은 별도다. `dotPrerequisitesReady`는 설정 파일의 준비

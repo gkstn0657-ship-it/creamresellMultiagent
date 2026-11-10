@@ -7,6 +7,7 @@ import {runBatch} from './batch.mjs';import {groupProducts} from './packets.mjs'
 import {writeJsonAtomic as write} from './atomic-json.mjs';
 import {recoveringClient,isProductLookupFailure} from './source-recovery.mjs';
 import {classifyError} from './error-catalog.mjs';
+import {offerMarketKey} from './market-offer.mjs';
 const read=p=>fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):null;
 const idFor=(work,n)=>'batch-'+crypto.createHash('sha256').update(`musinsa-profit:${work}:${n}`).digest('hex').slice(0,32).replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5');
 export async function runMusinsaProfitSearch({root,workId,client=new BackgroundClient(),collect=collectRankingCandidate,execute=runBatch,onEvent=()=>{},recovery={}}){
@@ -48,6 +49,24 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
     if(work.continuous&&['source_retry','source_recovery_exhausted'].includes(state.recovery?.type)&&(state.recovery.attempts||state.recovery.attempt)>=2&&state.currentSource?.productId===state.recovery.sourceId&&!seenSources.has(state.currentSource.productId)&&isProductLookupFailure(state.recovery.cmd,state.recovery.error))skipFailedLookup(state.currentSource,state.recovery.error,state.recovery.attempts||state.recovery.attempt);
     const updateProgress=()=>{const summary=workSummary(root,workOrders(root).find(w=>w.id===workId));state.profitableProductsFound=summary.profitableProductsFound;return summary;};
     const flush=async()=>{
+      if(!pending.length||stop())return;
+      // Refresh an interrupted, unreserved source packet before creating a new
+      // AI scope. Do not label old quotes fresh merely by reloading their file.
+      const unfinished=workOrders(root).find(w=>w.id===workId).entries.some(e=>read(path.join(root,e.runId,'batch-state.json'))?.status!=='complete');
+      if(!unfinished)for(let i=0;i<pending.length&&!stop();){
+        const old=pending[i];if(!old.observations.some(o=>o.kind==='no1_product'&&Date.now()-Date.parse(o.observedAt)>600000)){i++;continue;}
+        const source=old.observations.find(o=>o.kind==='no1_product')?.payload.rankingSource;
+        if(!source?.productId)throw Error('PENDING_PACKET_SOURCE_MISSING');
+        state.currentSource=source;state.status='discovering';save();
+        const evidenceDir=path.join(sourceDir,'evidence',source.productId);let n=fs.readdirSync(evidenceDir).length;
+        const otherMarkets=new Set(seenMarkets);for(const offer of old.offers)otherMarkets.delete(offerMarketKey(offer));
+        const fresh=await collect(source,{client,seenKreamIds:otherMarkets,onEvidence:async(cmd,payload,data)=>write(path.join(evidenceDir,`${++n}.json`),{cmd,payload,data,observedAt:new Date().toISOString()})});
+        if(fresh.status==='collected'){
+          pending[i]=fresh.packet;write(path.join(evidenceDir,'packet.json'),fresh.packet);
+          for(const id of fresh.marketKeys||(fresh.kreamId?[fresh.kreamId]:[]))seenMarkets.add(id);memory.seenKreamIds=[...seenMarkets];i++;
+        }else{pending.splice(i,1);state.skipped.push({sourceId:source.productId,productName:source.productName||null,reason:fresh.reason,code:classifyError({reason:fresh.reason}).code,refresh:true});}
+        emit({type:'pending_source_refreshed',sourceId:source.productId,status:fresh.status,reason:fresh.reason});
+      }
       if(!pending.length||stop())return;
       const packets=pending;
       const current=workOrders(root).find(w=>w.id===workId),id=current.entries.find(e=>read(path.join(root,e.runId,'batch-state.json'))?.status!=='complete')?.runId||idFor(workId,current.entries.length),batchDir=path.join(root,id),seeds=packets.flatMap(p=>p.offers);
@@ -92,9 +111,9 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
         state.retrySources=(state.retrySources||[]).filter(s=>s.productId!==source.productId);
         // A failed offer must not hide a different merchant listing for the same
         // KREAM product. Deduplicate market IDs only once a packet is queued.
-        if(result.kreamId&&result.status==='collected'){seenMarkets.add(result.kreamId);memory.seenKreamIds=[...seenMarkets];}
+        if(result.status==='collected'){for(const id of result.marketKeys||(result.kreamId?[result.kreamId]:[]))seenMarkets.add(id);memory.seenKreamIds=[...seenMarkets];}
         if(result.status==='collected'){write(path.join(evidenceDir,'packet.json'),result.packet);pending.push(result.packet);}
-        else state.skipped.push({sourceId:source.productId,kreamId:result.kreamId||null,reason:result.reason,code:classifyError({reason:result.reason}).code});
+        else state.skipped.push({sourceId:source.productId,productName:source.productName||null,kreamId:result.kreamId||null,reason:result.reason,code:classifyError({reason:result.reason}).code,marketChecks:result.marketChecks||null,...(result.lookupFailed?{lookupFailed:true,attempts:work.continuous?2:null,at:new Date().toISOString()}:{})});
         emit({type:'source_processed',sourceId:source.productId,rank:source.rank,status:result.status,reason:result.reason,code:result.reason?classifyError({reason:result.reason}).code:200,kreamId:result.kreamId,pending:pending.length});
         if(pending.length>=Math.min(5,updateProgress().remainingProducts))await flush();
       }

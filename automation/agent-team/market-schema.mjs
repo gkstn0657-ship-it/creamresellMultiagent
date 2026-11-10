@@ -1,5 +1,6 @@
 import {calculateMargin,SALE_MODES} from './margin-report.mjs';
 import {sizeKey} from '../no1-background/size-binding.mjs';
+import {buildPoizonSchema} from './poizon-schema.mjs';
 const finite=v=>typeof v==='number'&&Number.isFinite(v);
 // No1 fc/XA size keys, preserving its 30-day table mapping (not shoe conversion).
 export function no1SalesKey(value){const s=String(value??'').trim(),fit=s.match(/^(\d{2})\s*-\s*([SRT])$/i);return fit?`${fit[1]}-${fit[2].toUpperCase()}`:(s.match(/[\d.]+/g)?.join('.')||s.toLowerCase());}
@@ -10,6 +11,7 @@ export function salesAsOf(cache,now=Date.now()){
   return {timestamp:cache.fetchedAt,timeLabel:(days===0?'오늘':days===1?'어제':`${d.getUTCMonth()+1}월 ${d.getUTCDate()}일`)+` ${time}`,state:cache.state||null};
 }
 export function buildMarketSchema(observation,{desiredSellingPrice}={},now=Date.now()){
+  if(observation.payload?.request?.market==='poizon')return buildPoizonSchema(observation,{desiredSellingPrice});
   const p=observation.payload||{},request=p.request||{},research=p.marketResearch||{},history=research.sales30d;
   const screen=research.displayedSchema?.available&&research.displayedSchema.productCode===request.kreamId?research.displayedSchema:null;
   const stored=research.marginSettings?.source==='no1_web_saved_settings'?research.marginSettings:null;
@@ -55,7 +57,7 @@ export function buildMarketSchema(observation,{desiredSellingPrice}={},now=Date.
 export function marketSchemas(observations=[],options={},now=Date.now()){
   const latest=new Map();
   for(const o of observations){if(o.active===false||!['no1_product','collection_error'].includes(o.kind)||!o.payload?.request)continue;
-    const r=o.payload.request,key=JSON.stringify([r.kreamId,r.productUrl,r.color,r.option]),old=latest.get(key);
+    const r=o.payload.request,key=JSON.stringify([r.market||'kream',r.poizonId||r.kreamId,r.productUrl,r.color,r.option]),old=latest.get(key);
     if(!old||Date.parse(o.observedAt)>=Date.parse(old.observedAt))latest.set(key,o);
   }
   return [...latest.values()].map(o=>buildMarketSchema(o,options,now));
