@@ -66,6 +66,8 @@ Connector 0.5.0은 `/next?wait=20000` 롱폴링으로 명령을 즉시 받고 �
 
 ## 검증
 
+탐색 감시의 전체 코드·담당·복구 규칙은 [`automation/agent-team/ERROR_CODES.md`](../agent-team/ERROR_CODES.md)에 정리되어 있습니다.
+
 ```powershell
 node --test automation/no1-background/protocol.test.mjs automation/no1-background/bridge.test.mjs automation/no1-background/extension.test.mjs automation/no1-mcp-prototype/server-stock.test.mjs automation/no1-mcp-prototype/ui-policy.test.mjs
 node automation/no1-background/verify-registered.mjs --out=kream-runs/no1-background-20261110/registered-local.json

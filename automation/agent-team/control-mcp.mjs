@@ -15,6 +15,7 @@ const ROOT=fileURLToPath(new URL('../../kream-runs/agent-teams/',import.meta.url
 const BATCH=fileURLToPath(new URL('./batch.mjs',import.meta.url));
 const CONTINUOUS=fileURLToPath(new URL('./musinsa-continuous.mjs',import.meta.url));
 const WATCHDOG=fileURLToPath(new URL('./live-watchdog.mjs',import.meta.url));
+const REMOTE_WATCHDOG=fileURLToPath(new URL('./remote-watchdog.mjs',import.meta.url));
 const object=(properties,required=Object.keys(properties))=>({type:'object',properties,required,additionalProperties:false});
 const runId={type:'string',pattern:'^batch-[a-f0-9-]{36}$'},str={type:'string'};
 const workId={type:'string',pattern:'^work-[a-f0-9-]{36}$'},eventId={type:'string',pattern:'^evt-[a-f0-9]{64}$'};
@@ -61,6 +62,13 @@ export async function control(name,args={},options={}) {
   if(name==='cream_musinsa_work_continue')return withWorkLock(root,async()=>{
     const summary=continueWorkUntilStopped(root,args.workId),dir=path.join(root,'explorations',args.workId),lock=path.join(dir,'continuous.lock');
     const ensureWatchdog=async()=>{
+      if(!options.launchWatchdog){
+        const remoteLock=path.join(dir,'remote-watchdog.lock');let remoteAlive=false;
+        if(fs.existsSync(remoteLock))try{process.kill(Number(fs.readFileSync(remoteLock,'utf8')),0);remoteAlive=true;}catch{}
+        if(!remoteAlive){fs.mkdirSync(dir,{recursive:true});const output=fs.openSync(path.join(dir,'remote-watchdog.log'),'a');
+          const child=spawn(process.execPath,[REMOTE_WATCHDOG,`--root=${root}`,`--work=${args.workId}`],{cwd:fileURLToPath(new URL('../../',import.meta.url)),windowsHide:true,detached:true,stdio:['ignore',output,output]});
+          try{await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});}finally{fs.closeSync(output);}child.unref();}
+      }
       const watchdogLock=path.join(dir,'watchdog.lock');if(fs.existsSync(watchdogLock))try{process.kill(Number(fs.readFileSync(watchdogLock,'utf8')),0);return;}catch{}
       if(options.launchWatchdog){await options.launchWatchdog({root,workId:args.workId});return;}
       fs.mkdirSync(dir,{recursive:true});const output=fs.openSync(path.join(dir,'watchdog.log'),'a');

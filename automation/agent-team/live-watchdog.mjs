@@ -12,11 +12,18 @@ export function classifyWatchdog({work,state,workerAlive,bridge,bridgeError,now=
  if(bridge.browserConnected!==true)return {status:'connector_disconnected',reason:'NO1_BRIDGE_DISCONNECTED',severity:'error'};
  if(bridge.connectorVersion!==bridge.requiredConnectorVersion)return {status:'connector_update_required',reason:'NO1_CONNECTOR_UPDATE_REQUIRED',severity:'error'};
  if(state?.status==='waiting_for_retry')return {status:'waiting',reason:state.waitReason||'RETRY_SCHEDULED',severity:state.waitReason==='new_ranking_cycle'?'none':'warning'};
+ if(state?.status==='recovering'&&state.recovery?.error)return {status:'recovering',reason:state.recovery.error,severity:'warning'};
  if(['discovering','recovering','running_batch'].includes(state?.status)&&state.updatedAt&&now-Date.parse(state.updatedAt)>300000)return {status:'stalled',reason:'WORKER_PROGRESS_STALE',severity:'error'};
  if(state?.status==='needs_attention')return {status:'needs_attention',reason:state.error||'WORK_NEEDS_ATTENTION',severity:'error'};
  return {status:'healthy',reason:state?.status||'RUNNING',severity:'none'};
 }
-export async function pollWatchdog({root,workId,client=new BackgroundClient(),restart=async()=>control('cream_musinsa_work_continue',{workId},{root}),restartBridge=restartLocalBridge,notify=nativeNotify,now=Date.now}={}){
+export function classifyRemoteBridge(remote,now=Date.now()){
+ if(!remote)return null;
+ if(!remote.at||now-Date.parse(remote.at)>30000)return {status:'remote_stalled',reason:'REMOTE_BRIDGE_SIGNAL_STALE',severity:'warning'};
+ if(remote.connected===true)return {status:'healthy',reason:'RUNNING',severity:'none'};
+ return {status:'remote_disconnected',reason:String(remote.code||'REMOTE_BRIDGE_NOT_RUNNING'),severity:'warning'};
+}
+export async function pollWatchdog({root,workId,client=new BackgroundClient(),restart=async()=>control('cream_musinsa_work_continue',{workId},{root}),restartBridge=restartLocalBridge,notify=nativeNotify,now=Date.now,remoteBridgeStatus=undefined}={}){
  const dir=path.join(root,'explorations',workId),file=path.join(dir,'monitor.json');fs.mkdirSync(dir,{recursive:true});
  const previous=read(file),work=read(path.join(root,'work-orders',workId+'.json')),state=read(path.join(dir,'state.json'))||{};
  const pid=Number((()=>{try{return fs.readFileSync(path.join(dir,'continuous.lock'),'utf8');}catch{return 0;}})());
@@ -35,11 +42,27 @@ export async function pollWatchdog({root,workId,client=new BackgroundClient(),re
   request_connector_reload:async()=>({status:'requires_connector_reload'}),
   honor_backoff:async()=>({status:'backoff_preserved'}),
   retry_saved_request:async()=>({status:'runner_retry_preserved'}),
+  record_exclusion:async()=>({status:'product_exclusion_recorded'}),
+  request_remote_pairing:async()=>({status:'requires_remote_bridge_credentials'}),
+  record_remote_bridge_failure:async()=>({status:'remote_bridge_retry_preserved'}),
   inspect_stall:async()=>({status:'diagnostic_recorded'}),
   record_unknown_error:async(signal)=>{const diagnostic=path.join(dir,'last-unknown-error.json');write(diagnostic,{at:signal.at,code:signal.code,reason:signal.reason,sourceStatus:state.status,checked:monitor.checked});return {status:'diagnostic_recorded'};},
  };
- try{const routed=await sendHeartbeat({root,workId,finding:monitor,handlers});monitor.code=routed.signal.code;monitor.handler=routed.decision.handler;monitor.action=routed.decision.action;monitor.actionResult=routed.decision.result?.status||null;}
+ try{const routed=await sendHeartbeat({root,workId,finding:monitor,handlers});monitor.code=routed.ack.code;monitor.handler=routed.decision.handler;monitor.action=routed.decision.action;monitor.actionResult=routed.decision.result?.status||null;}
  catch(e){monitor.routingError=String(e.message).slice(0,120);}
+ const remoteSidecar=Number((()=>{try{return fs.readFileSync(path.join(dir,'remote-watchdog.lock'),'utf8');}catch{return 0;}})());
+ if(live(remoteSidecar))monitor.remoteBridge=read(path.join(dir,'remote-monitor.json'));
+ else{
+ const remote=remoteBridgeStatus===undefined?read(path.join(process.env.LOCALAPPDATA||'', 'CreamDotBridge','status.json')):remoteBridgeStatus;
+ const remoteFinding=classifyRemoteBridge(remote,now());
+ if(remoteFinding){
+  const previousRemote=previous?.remoteBridge;
+  try{const routed=await sendHeartbeat({root,workId,finding:remoteFinding,handlers,channel:'remote'});
+   monitor.remoteBridge={...remoteFinding,code:routed.ack.code,handler:routed.decision.handler,action:routed.decision.action,actionResult:routed.decision.result?.status||null,at:remote?.at||null};
+   if(previousRemote?.reason!==remoteFinding.reason&&remoteFinding.severity!=='none')fs.appendFileSync(path.join(dir,'continuous.log'),JSON.stringify({type:'work_needs_attention',error:remoteFinding.reason,monitorCode:routed.ack.code,at:monitor.at})+'\n');
+  }catch(e){monitor.remoteRoutingError=String(e.message).slice(0,120);}
+ }
+ }
  write(file,monitor);
  if(changed&&finding.severity!=='none')fs.appendFileSync(path.join(dir,'continuous.log'),JSON.stringify({type:'work_needs_attention',error:monitor.reason,monitorCode:monitor.code,at:monitor.at})+'\n');
  if(changed&&finding.severity!=='none')try{await notify(monitor);monitor.notifiedAt=new Date(now()).toISOString();write(file,monitor);}catch(e){monitor.notificationError=String(e.message).slice(0,100);write(file,monitor);}

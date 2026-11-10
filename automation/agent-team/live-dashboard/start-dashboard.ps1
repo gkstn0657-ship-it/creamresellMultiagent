@@ -32,6 +32,19 @@ if ($WorkId -and $WorkId -match '^work-[a-f0-9-]{36}$') {
         $taskWatchScript = Join-Path $taskRepo 'automation\agent-team\live-watchdog.mjs'
         Start-Process -FilePath $taskNode -ArgumentList @(('"' + $taskWatchScript + '"'),('"--root=' + $taskRoot + '"'),('--work=' + $WorkId)) -WorkingDirectory $taskRepo -WindowStyle Hidden -RedirectStandardOutput (Join-Path $taskWorkDir 'watchdog.log') -RedirectStandardError (Join-Path $taskWorkDir 'watchdog-error.log') | Out-Null
     }
+    $taskRemoteLock = Join-Path $taskWorkDir 'remote-watchdog.lock'
+    $taskRemoteRunning = $false
+    if (Test-Path -LiteralPath $taskRemoteLock) {
+        try {
+            $taskRemotePid = [int](Get-Content -LiteralPath $taskRemoteLock -Raw)
+            $taskRemoteRunning = [bool](Get-Process -Id $taskRemotePid -ErrorAction SilentlyContinue)
+        } catch { $taskRemoteRunning = $false }
+    }
+    if (-not $taskRemoteRunning) {
+        New-Item -ItemType Directory -Path $taskWorkDir -Force | Out-Null
+        $taskRemoteScript = Join-Path $taskRepo 'automation\agent-team\remote-watchdog.mjs'
+        Start-Process -FilePath $taskNode -ArgumentList @(('"' + $taskRemoteScript + '"'),('"--root=' + $taskRoot + '"'),('--work=' + $WorkId)) -WorkingDirectory $taskRepo -WindowStyle Hidden -RedirectStandardOutput (Join-Path $taskWorkDir 'remote-watchdog.log') -RedirectStandardError (Join-Path $taskWorkDir 'remote-watchdog-error.log') | Out-Null
+    }
 }
 $taskEdge = @('C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe','C:\Program Files\Microsoft\Edge\Application\msedge.exe') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if (-not $taskEdge) { throw 'Microsoft Edge is required for the dashboard app window.' }

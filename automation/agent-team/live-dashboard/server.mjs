@@ -26,6 +26,7 @@ export function liveDashboardData(root=defaultRoot,workId){
  if(!work)return {version:1,observedAt:new Date().toISOString(),status:'not_started',workerAlive:false,checked:0,qualified:0,recent:[],events:[]};
  const dir=path.join(root,'explorations',work.id),state=read(path.join(dir,'state.json'))||{};
  const monitor=read(path.join(dir,'monitor.json'));
+ const remoteMonitor=read(path.join(dir,'remote-monitor.json'));
  const monitorFresh=monitor?.at&&Date.now()-Date.parse(monitor.at)<30000;
  const workerPid=Number((()=>{try{return fs.readFileSync(path.join(dir,'continuous.lock'),'utf8');}catch{return 0;}})());
  const workerAlive=alive(workerPid);
@@ -54,7 +55,7 @@ export function liveDashboardData(root=defaultRoot,workId){
   lastBatch:{runId:state.currentRunId||null,status:current?.status||null,productCount:current?.productCount||0,judged:current?.judged||0},
   agents:{owner:activeJudging?'judging':'idle',reviewer:activeJudging?'possibly_reviewing':'idle'},
   updatedAt:state.updatedAt||null,retryAt:state.retryAt||null,waitReason:status==='waiting'&&monitorFresh&&monitor.severity==='error'?monitor.reason:state.waitReason||null,error:state.error||null,
-  monitor:monitorFresh?{code:monitor.code,status:monitor.status,reason:monitor.reason,handler:monitor.handler,action:monitor.action,at:monitor.at}:null,
+  monitor:monitorFresh?{code:monitor.code,status:monitor.status,reason:monitor.reason,handler:monitor.handler,action:monitor.action,remoteBridge:remoteMonitor||monitor.remoteBridge||null,at:monitor.at}:null,
   featured:recent.find(r=>r.qualified)||null,recent:recent.slice(0,8),events:recentEvents(path.join(dir,'continuous.log')),
  };
 }

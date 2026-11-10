@@ -2,6 +2,7 @@ import fs from 'node:fs';import path from 'node:path';import {pathToFileURL} fro
 import {runMusinsaProfitSearch} from './musinsa-profit-runner.mjs';
 import {workOrders} from './work-orders.mjs';
 import {writeJsonAtomic as write} from './atomic-json.mjs';
+import {classifyError} from './error-catalog.mjs';
 const read=p=>fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):null;
 export async function runContinuousMusinsa({root,workId,run=runMusinsaProfitSearch,sleep=ms=>new Promise(r=>setTimeout(r,ms)),onEvent=()=>{},intervals={sourceExhausted:300000,lookupFailure:900000,otherFailure:300000}}){
  const dir=path.join(root,'explorations',workId);fs.mkdirSync(dir,{recursive:true});
@@ -23,6 +24,7 @@ export async function runContinuousMusinsa({root,workId,run=runMusinsaProfitSear
    const waitMs=result.status==='source_exhausted'||result.status==='complete'?intervals.sourceExhausted:result.error==='KREAM_SEARCH_FAILED'?intervals.lookupFailure:intervals.otherFailure;
    const stateFile=path.join(dir,'state.json'),state=read(stateFile)||result;
    state.status='waiting_for_retry';state.waitReason=result.status==='source_exhausted'?'new_ranking_cycle':result.error||result.status;
+   state.waitCode=classifyError({reason:state.waitReason,status:'waiting'}).code;
    state.retryAt=new Date(Date.now()+waitMs).toISOString();write(stateFile,state);
    onEvent({type:'continuous_wait',reason:state.waitReason,retryAt:state.retryAt,found:state.profitableProductsFound});
    const wake=path.join(dir,'WAKE');

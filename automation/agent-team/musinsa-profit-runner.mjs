@@ -6,6 +6,7 @@ import {workOrders,workSummary,reserveWork,withWorkLock} from './work-orders.mjs
 import {runBatch} from './batch.mjs';import {groupProducts} from './packets.mjs';import {digest} from './store.mjs';
 import {writeJsonAtomic as write} from './atomic-json.mjs';
 import {recoveringClient} from './source-recovery.mjs';
+import {classifyError} from './error-catalog.mjs';
 const read=p=>fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):null;
 const idFor=(work,n)=>'batch-'+crypto.createHash('sha256').update(`musinsa-profit:${work}:${n}`).digest('hex').slice(0,32).replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5');
 export async function runMusinsaProfitSearch({root,workId,client=new BackgroundClient(),collect=collectRankingCandidate,execute=runBatch,onEvent=()=>{},recovery={}}){
@@ -24,7 +25,7 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
   let pending=(state.pendingSourceIds||[]).map(id=>read(path.join(sourceDir,'evidence',id,'packet.json')));
   if(pending.some(p=>!p))throw Error('PENDING_PACKET_MISSING');
   client=recoveringClient(client,{...recovery,stopped:stop,onRecovery:e=>{
-    state.recovery={...e,sourceId:state.currentSource?.productId||null,at:new Date().toISOString()};
+    state.recovery={...e,errorCode:e.error?classifyError({reason:e.error}).code:null,sourceId:state.currentSource?.productId||null,at:new Date().toISOString()};
     state.status=e.type==='source_retry'?'recovering':e.type==='source_recovered'?'discovering':'needs_attention';emit(e);
   }});
   try{
@@ -80,15 +81,15 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
         // KREAM product. Deduplicate market IDs only once a packet is queued.
         if(result.kreamId&&result.status==='collected'){seenMarkets.add(result.kreamId);memory.seenKreamIds=[...seenMarkets];}
         if(result.status==='collected'){write(path.join(evidenceDir,'packet.json'),result.packet);pending.push(result.packet);}
-        else state.skipped.push({sourceId:source.productId,kreamId:result.kreamId||null,reason:result.reason});
-        emit({type:'source_processed',sourceId:source.productId,rank:source.rank,status:result.status,reason:result.reason,kreamId:result.kreamId,pending:pending.length});
+        else state.skipped.push({sourceId:source.productId,kreamId:result.kreamId||null,reason:result.reason,code:classifyError({reason:result.reason}).code});
+        emit({type:'source_processed',sourceId:source.productId,rank:source.rank,status:result.status,reason:result.reason,code:result.reason?classifyError({reason:result.reason}).code:200,kreamId:result.kreamId,pending:pending.length});
         if(pending.length>=Math.min(5,updateProgress().remainingProducts))await flush();
       }
       await flush();if(stop()||!work.continuous&&updateProgress().remainingProducts===0)break;
     }
     state.status=stop()?'stopped':!work.continuous&&updateProgress().remainingProducts===0?'complete':'source_exhausted';
   }catch(e){
-    state.status=stop()?'stopped':'needs_attention';state.error=String(e.message).slice(0,250);
+    state.status=stop()?'stopped':'needs_attention';state.error=String(e.message).slice(0,250);state.errorCode=classifyError({reason:state.error}).code;
     if(state.status==='needs_attention'){
       if(state.currentSource&&!memory.seenSourceIds.includes(state.currentSource.productId)&&!(state.retrySources||[]).some(s=>s.productId===state.currentSource.productId))state.retrySources=[...(state.retrySources||[]),state.currentSource];
       // Publish a real failed discovery attempt through the existing batch
