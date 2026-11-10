@@ -40,8 +40,12 @@ export async function collectRankingCandidate(candidate,{client,onEvidence=()=>{
     if(matchRankingModels(stock,items).length||!search.nextCursor)break;cursor=search.nextCursor;
   }
   const unique=new Map(matchRankingModels(stock,items).map(m=>[m.item.productCode,m]));
-  if(unique.size!==1)return {status:'skipped',reason:unique.size?'MARKET_MODEL_AMBIGUOUS':'EXACT_MARKET_MODEL_NOT_FOUND'};
-  const match=[...unique.values()][0],id=match.item.productCode;
+  if(!unique.size)return {status:'skipped',reason:'EXACT_MARKET_MODEL_NOT_FOUND'};
+  // Multiple registrations of the same exact manufacturer code are listing
+  // alternatives, not fuzzy product matches. Prefer the listing with observed
+  // historical trades; recent demand is still checked independently below.
+  const alternatives=[...unique.values()].sort((a,b)=>(b.item.totalSales||0)-(a.item.totalSales||0)||a.item.productCode.localeCompare(b.item.productCode,'en',{numeric:true}));
+  const match=alternatives[0],id=match.item.productCode;
   if(seenKreamIds.has(id))return {status:'skipped',reason:'DUPLICATE_KREAM_PRODUCT',kreamId:id};
   const prices=await cached.request('market:kream:prices',{productCode:id});
   const details=await cached.request('market:kream:details',{productCode:id,includeFastDelivery:true});
@@ -64,7 +68,7 @@ export async function collectRankingCandidate(candidate,{client,onEvidence=()=>{
     const payload=await probeProduct(cached,item.seed,{matchSize:()=>item.binding});
     payload.identity.marketModelIndependentlyVerified=true;
     payload.identity.marketBinding='exact model code from No1 KREAM search matched to merchant maker model; source option bound separately';
-    payload.marketIdentityEvidence={source:'no1-kream-model-search',market:match.item,sourceModel:stock.makerNumber,sourceProductId:candidate.productId};
+    payload.marketIdentityEvidence={source:'no1-kream-model-search',market:match.item,sourceModel:stock.makerNumber,sourceProductId:candidate.productId,listingSelection:'exact model; highest historical totalSales, then product ID; not a 30-day demand claim',alternativeListingIds:alternatives.map(m=>m.item.productCode)};
     payload.missingFields=payload.missingFields.filter(x=>x!=='marketModelIndependentEvidence');
     payload.rankingSource={...candidate,source:'no1-musinsa-ranking'};
     offers.push(item.seed);observations.push({kind:'no1_product',mode:'live',observedAt:payload.observedAt,payload});

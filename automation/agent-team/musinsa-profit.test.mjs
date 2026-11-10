@@ -31,6 +31,7 @@ test('one-size fallback requires singleton choices and never maps ambiguous or n
   assert.equal(rankingSizeMatch(stock,market,'NONE').evidence.kind,'exact-model-single-option');
   assert.equal(rankingSizeMatch({...stock,combinedOptions:[{size:'NONE'},{size:'OTHER'}]},market,'NONE'),null);
   assert.equal(rankingSizeMatch(stock,market,'230'),null);
+  assert.equal(rankingSizeMatch(stock,{prices:[{size:'XS'}]},'085(XS)').price.size,'XS');
 });
 test('runner continues after held products until target successes, keeping separate persistent ranking deduplication',async()=>{
   const root=temp(),w=startWork(root,{targetProfitableProducts:2,userInstruction:'find 2 profitable',requestId:'test'});

@@ -3,7 +3,8 @@ const registry=JSON.parse(fs.readFileSync(new URL('./size-evidence.json',import.
 export const sizeKey=value=>String(value??'').trim().toUpperCase().replace(/\s+/g,'')
   // Only the existing apparel size annotation is equivalent to its letter size.
   // Never strip gender, width, or a second region from shoe labels.
-  .replace(/^(XXS|XS|S|M|L|XL|XXL|2XL|3XL)\(\d{2,3}\)$/,'$1');
+  .replace(/^(XXS|XS|S|M|L|XL|XXL|2XL|3XL)\(\d{2,3}\)$/,'$1')
+  .replace(/^\d{2,3}\((XXS|XS|S|M|L|XL|XXL|2XL|3XL)\)$/,'$1');
 export function matchMarketSize({stock,productUrl,kreamId,sourceSize,prices,now=Date.now(),evidence=registry.entries}){
   const exact=prices.filter(p=>sizeKey(p.size)===sizeKey(sourceSize));
   if(exact.length===1)return {price:exact[0],evidence:{kind:'same-size-label',sourceSize,marketSize:exact[0].size}};
