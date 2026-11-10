@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {marginReport} from './margin-report.mjs';
 const ROOT=fileURLToPath(new URL('../../kream-runs/agent-teams/',import.meta.url));
 const validId=id=>typeof id==='string'&&/^batch-[a-f0-9-]{36}$/.test(id);
 const read=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch(e){if(e.code==='ENOENT')return null;throw Error('SAVED_DATA_UNREADABLE');}};
@@ -40,6 +41,7 @@ export function panelData({runId,productId}={},options={}) {
       decision:assessment?.decision||null,reason:short(assessment?.reason||''),readiness:assessment?.readiness||null,
       unresolved:assessment?.unresolved||p?.gaps||[],observedAt:observations.map(o=>o.observedAt).filter(Boolean).sort().at(-1)||null,
       scenario:calc?{...fields(calc,['perUnit','totalEconomicProfit','totalCashProfit','quantity','missing']),inputs:calc.inputs}:null,
+      margins:marginReport(observations),
       actors:(team?.actors||[]).map(a=>({...fields(a,['role','model','requestedModel','effectiveModel','effort']),lastEvent:events.filter(e=>e.threadId===a.threadId).at(-1)?.type||null})),
       lastEvent:last?fields(last,['at','type','tool','status']):null,error:short(row?.error||null),toolCalls:team?.toolCalls||0};
     result.products.push(item);

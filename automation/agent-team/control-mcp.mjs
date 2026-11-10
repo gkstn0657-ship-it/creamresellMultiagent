@@ -82,6 +82,8 @@ export async function control(name,args={},options={}) {
   const dir=runDirectory(args.runId,root);if(!fs.existsSync(path.join(dir,'products.json')))throw Error('BATCH_NOT_FOUND');
   if(name==='cream_batch_status'){
     const file=path.join(dir,'batch-state.json'),state=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):{status:'starting',runId:args.runId};
+    const marginProducts=panelData({runId:args.runId},options).products;
+    state.margins=marginProducts.map(p=>({productId:p.productId,...p.margins}));
     let workerAlive=false;try{const p=JSON.parse(fs.readFileSync(path.join(dir,'process.json'),'utf8'));process.kill(p.pid,0);workerAlive=true;}catch{}
     if(['collecting','judging','starting'].includes(state.status)&&!workerAlive)return {...state,storedStatus:state.status,status:'needs_attention',error:'WORKER_NOT_RUNNING',workerAlive};
     return {...state,workerAlive};
@@ -129,7 +131,7 @@ export async function handleMcp(request,options={}) {
   if(request.method!=='tools/call')throw Error('METHOD_NOT_SUPPORTED');
   try {
     const data=await control(request.params.name,request.params.arguments,options);
-    if(['cream_open_panel','cream_panel_data'].includes(request.params.name))return {structuredContent:{version:data.version,run:data.selectedRun,productCount:data.products.length,selectedProduct:data.detail?.productId||null,uiStatus:'render_requested',displayVerified:false},_meta:{panel:data},content:[{type:'text',text:JSON.stringify({uiStatus:'render_requested',displayVerified:false,note:'The data request succeeded. This is not proof that the host displayed a panel. Do not claim it opened without a UI-ready signal or user confirmation.',run:data.selectedRun,products:data.products.map(p=>({productId:p.productId,status:p.status,decision:p.decision,reason:p.reason}))})}],isError:false};
+    if(['cream_open_panel','cream_panel_data'].includes(request.params.name))return {structuredContent:{version:data.version,run:data.selectedRun,productCount:data.products.length,selectedProduct:data.detail?.productId||null,uiStatus:'render_requested',displayVerified:false},_meta:{panel:data},content:[{type:'text',text:JSON.stringify({uiStatus:'render_requested',displayVerified:false,note:'The data request succeeded. This is not proof that the host displayed a panel. Do not claim it opened without a UI-ready signal or user confirmation.',run:data.selectedRun,products:data.products.map(p=>({productId:p.productId,status:p.status,decision:p.decision,reason:p.reason,margins:p.margins}))})}],isError:false};
     return {structuredContent:data,content:[{type:'text',text:JSON.stringify(data)}],isError:false};
   } catch(e){return {content:[{type:'text',text:e.message}],isError:true};}
 }

@@ -4,12 +4,14 @@ import {BackgroundClient} from '../no1-background/client.mjs';
 import {probeProduct,validateProbeArgs} from '../no1-background/product-probe.mjs';
 import {SourcingTools} from '../agentic/tools.mjs';
 import {calculateScenario,evidenceGaps,publishAssessment,uid,digest,proposalHash} from './store.mjs';
+import {marginReport} from './margin-report.mjs';
 const schema=(properties,required=Object.keys(properties))=>({type:'object',properties,required,additionalProperties:false});
 const str={type:'string'}, arr={type:'array',items:str}, num={type:['number','null']};
 const proposalSchema=schema({decision:{type:'string',enum:['adopt','hold','exclude']},reason:str,basis:arr,unresolved:arr});
 const def=(name,description,inputSchema)=>({type:'function',name,description,inputSchema});
 export const TOOL_DEFINITIONS=[
   def('team_state','Read the mission, saved observations, calculations, reviews and progress.',schema({})),
+  def('read_margin_report','Read per-option No1-compatible margin amount, return rate and profit/loss/break-even/unknown for fast, normal, instant and desired selling prices. Uses collected evidence only, no network/UI. Default fees are explicit No1 defaults, not user settings. Desired price is hypothetical; missing prices stay unknown.',schema({desiredSellingPrice:num,taxMode:{type:'boolean'},fees:schema({kreamPercent:{type:'number',minimum:0,maximum:100},kreamInspectionFee:{type:'integer',minimum:0},poizonPercent:{type:'number',minimum:0,maximum:100},poizonMinFee:{type:'integer',minimum:0},poizonMaxFee:{type:'integer',minimum:0}},[])},[])),
   def('read_observation','Read immutable original evidence or a saved numeric scenario by its ID.',schema({id:str})),
   def('collect_no1','Collect the scoped product through the authenticated background No1 adapter. May use an isolated guest cart internally. Never opens a UI or purchases.',schema({refreshReason:str})),
   def('investigate','Choose a collection operation for the current product only. Arguments are JSON encoded. market_page:{pid}; bind_identity:{pid,model,title,quote,file}; search_sources:{pid,query}; catalog_page:{pid,catalogIndex}; inspect_offer:{offerId}; read_evidence:{file,offset?,length?}. No desktop UI. Do not repeat an authentication failure.',schema({operation:{type:'string',enum:['market_page','bind_identity','search_sources','catalog_page','inspect_offer','read_evidence']},arguments:str})),
@@ -18,7 +20,7 @@ export const TOOL_DEFINITIONS=[
   def('record_review','Independent reviewer only. Record source verification and inconsistencies; pass is not a profitability or purchase approval.',schema({verdict:{type:'string',enum:['pass','rework']},issues:arr,basis:arr})),
   def('publish_assessment','Product owner only. Persist AI adoption/hold/exclude judgment with a current independent review. Unknown facts remain visible; never purchases.',schema({decision:{type:'string',enum:['adopt','hold','exclude']},reason:str,basis:arr,unresolved:arr,reviewId:str})),
 ];
-export const reviewTools=TOOL_DEFINITIONS.filter(x=>['team_state','read_observation','record_review'].includes(x.name));
+export const reviewTools=TOOL_DEFINITIONS.filter(x=>['team_state','read_margin_report','read_observation','record_review'].includes(x.name));
 export const ownerTools=TOOL_DEFINITIONS.filter(x=>x.name!=='record_review');
 
 export class TeamTools {
@@ -38,6 +40,7 @@ export class TeamTools {
     const reviewer=this.store.data.actors.some(x=>x.threadId===threadId&&x.role==='reviewer');
     if(reviewer&&!reviewTools.some(x=>x.name===tool))throw Error('REVIEWER_READ_ONLY');
     if(tool==='team_state')return {...this.store.summary(),evidenceGaps:evidenceGaps(this.store)};
+    if(tool==='read_margin_report')return marginReport(this.store.data.observations,args);
     if(tool==='read_observation'){
       const observation=this.store.read(args.id);
       if(reviewer){if(!this.reviewReads.has(threadId))this.reviewReads.set(threadId,new Set());this.reviewReads.get(threadId).add(args.id);}
