@@ -17,7 +17,7 @@ export async function probeProduct(client, args) {
   const productId = args.productUrl.split('/').at(-1);
   const startedAt = new Date().toISOString();
   const local = await client.status();
-  if (!['0.2.0','0.3.0','0.4.0','0.5.0'].includes(local.connectorVersion)) throw Error('NO1_CONNECTOR_UPDATE_REQUIRED');
+  if (!['0.2.0','0.3.0','0.4.0','0.5.0','0.6.0'].includes(local.connectorVersion)) throw Error('NO1_CONNECTOR_UPDATE_REQUIRED');
   const settings = await client.request('settings:get');
   if (settings.kreamApiBrowser !== 'electron') throw Error('NO1_BACKGROUND_MODE_REQUIRED');
   const stock = await client.request('stock:check', {url: args.productUrl});
@@ -36,13 +36,13 @@ export async function probeProduct(client, args) {
   catch (error) { errors.market = safeCode(error.message); }
   let marketResearch=null;
   const binding=market?matchMarketSize({stock,productUrl:args.productUrl,kreamId:args.kreamId,sourceSize:args.option,prices:market.prices}):null;
-  if(market&&['0.3.0','0.4.0','0.5.0'].includes(local.connectorVersion))marketResearch=await marketEvidence(client,{...args,option:binding?.price.size||args.option},market);
+  if(market&&['0.3.0','0.4.0','0.5.0','0.6.0'].includes(local.connectorVersion))marketResearch=await marketEvidence(client,{...args,option:binding?.price.size||args.option},market,{schema:local.connectorVersion==='0.6.0'});
   if(marketResearch)for(const [key,value] of Object.entries(marketResearch.errors))errors['market_'+key]=value;
   return {
     mode: 'background-relay', queryStatus: Object.keys(errors).length ? 'partial' : 'complete', errors, startedAt, observedAt: new Date().toISOString(), request: args,
     identity: {sourceProductVerified: true, sourceModelVerified: true, sourceOptionVerified: true, marketModelIndependentlyVerified: false, marketBinding: 'requested-product-id-and-matched-relay-response'},
     stock: {...stock, selectedOption: selected, selectedStockQuantity: stockQuantity}, benefits, market, marketResearch, sizeBinding:binding?.evidence||null,
-    sourceDataAsOf: null, upstreamFreshnessConfirmed: false, actualCheckoutPriceConfirmed: false,
+    sourceDataAsOf: marketResearch?.sales30d?.cacheInfo?.fetchedAt||null, upstreamFreshnessConfirmed: false, actualCheckoutPriceConfirmed: false,
     promotionAllowed: false, decision: 'hold',
     missingFields: [...(benefits ? [] : ['benefitQuote']), ...(market ? [] : ['marketPrices']), ...(binding?[]:['marketSizeBinding']), 'marketModelIndependentEvidence', 'upstreamDataAsOf', ...(marketResearch?.trades?.coverageComplete?[]:['transactions30d']), ...(marketResearch?.selectedTrades?.coverageComplete?[]:['selectedOptionTransactions30d']), 'actualCheckoutPrice', 'shippingAndSellerFees', 'couponQuantityEligibilityAtCheckout',...Object.values(marketResearch?.errors||{})]
   };

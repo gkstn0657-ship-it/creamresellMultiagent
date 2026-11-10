@@ -5,7 +5,7 @@ test('new market commands are bounded reads and cannot place orders',()=>{
   validateCommand('market:kream:details',{productCode:'1120286',includeFastDelivery:false});
   validateCommand('market:kream:trades',{productCode:'1120286',cursor:'1'});
   validateCommand('market:kream:askPreviewBatch',{productCode:'1120286',items:[{option:'L',price:340000,isInstant:false}]});
-  for(const [cmd,payload] of [['market:kream:details',{productCode:'1',includeFastDelivery:true}],['market:kream:trades',{productCode:'1',cursor:'https://evil.test'}],['market:kream:askPreviewBatch',{productCode:'1',items:Array(4).fill({option:'L',price:1,isInstant:false})}],['market:kream:ask',{productCode:'1'}]])assert.throws(()=>validateCommand(cmd,payload));
+  for(const [cmd,payload] of [['market:kream:details',{productCode:'1',includeFastDelivery:'true'}],['market:kream:trades',{productCode:'1',cursor:'https://evil.test'}],['market:kream:askPreviewBatch',{productCode:'1',items:Array(4).fill({option:'L',price:1,isInstant:false})}],['market:kream:ask',{productCode:'1'}]])assert.throws(()=>validateCommand(cmd,payload));
 });
 test('market evidence retains unknowns and drops account data',()=>{
   assert.deepEqual(projectData('market:kream:details',{colorway:'Black',totalSales:3,sizeOptions:[{size:'L',option:'L',lowestNormal:340000,highestBid:null,token:'secret'}],token:'secret'}),{colorway:'Black',totalSales:3,sizeOptions:[{size:'L',option:'L',lowestNormal:340000,highestBid:null}]});

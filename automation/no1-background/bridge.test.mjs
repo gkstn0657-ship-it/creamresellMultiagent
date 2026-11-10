@@ -7,7 +7,7 @@ import {dispatchBackground} from './mcp.mjs';
 const key = 'a'.repeat(64);
 test('pipeline capability follows connector connectivity, not authentication proof',async t=>{
  const {bridge,send}=await fixture(t);assert.equal(bridge.status().pipelineProductQueriesEnabled,false);
- await send('/next',null,{'X-No1-Connector-Version':'0.5.0'});
+ await send('/next',null,{'X-No1-Connector-Version':'0.6.0'});
  assert.equal(bridge.status().pipelineProductQueriesEnabled,true);
  assert.equal(bridge.status().authentication,'check-platform-status-separately');
  await send('/disconnect',{});assert.equal(bridge.status().pipelineProductQueriesEnabled,false);

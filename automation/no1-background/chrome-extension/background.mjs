@@ -1,6 +1,7 @@
-import {relayRequest, validateCommand, safeCode, PRODUCT_COMMANDS, CONNECTOR_VERSION} from './protocol.mjs';
+import {relayRequest, validateCommand, projectData, safeCode, PRODUCT_COMMANDS, CONNECTOR_VERSION} from './protocol.mjs';
+import {readDisplayedTable,readSavedMarginSettings} from './schema-data.mjs';
 const BASE = 'http://127.0.0.1:8871';
-let busy = false, nextPoll=null;
+let busy = false, nextPoll=null,connectionGeneration=0;
 
 async function localRequest(key, route, body) {
   const res = await fetch(BASE + route, {method: body ? 'POST' : 'GET', headers: {'X-No1-Bridge-Key': key, 'X-No1-Connector-Version': CONNECTOR_VERSION, ...(body ? {'Content-Type': 'application/json'} : {})}, ...(body ? {body: JSON.stringify(body)} : {}), redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(route.startsWith('/next')?25000:5000)});
@@ -13,7 +14,7 @@ async function localRequest(key, route, body) {
 async function existingWebToken() {
   const tabs = await chrome.tabs.query({url: ['https://no1.certi.life/sourcing/*', 'https://onebox.team/sourcing/*']});
   if (!tabs.length) throw Error('NO1_WEB_TAB_REQUIRED');
-  const tokens = new Set();
+  const tokens = new Set(),authenticatedTabs=[];
   let inspected = false;
   for (const tab of tabs) {
     try {
@@ -27,31 +28,46 @@ async function existingWebToken() {
         }
       });
       inspected = true;
-      for (const frame of frames) if (typeof frame.result === 'string') tokens.add(frame.result);
+      for (const frame of frames) if (typeof frame.result === 'string') {tokens.add(frame.result);if(!authenticatedTabs.includes(tab.id))authenticatedTabs.push(tab.id);}
     } catch { /* Do not log browser exceptions: they may contain page details. */ }
   }
   if (!inspected) throw Error('NO1_BROWSER_ACCESS_FAILED');
   if (tokens.size > 1) throw Error('NO1_MULTIPLE_WEB_SESSIONS');
   if (!tokens.size) throw Error('NO1_AUTH_REQUIRED');
-  return tokens.values().next().value;
+  return {token:tokens.values().next().value,tabIds:authenticatedTabs};
+}
+
+async function pageSchema(cmd,payload,tabIds){
+  const values=[];
+  for(const tabId of tabIds){
+    const frames=await chrome.scripting.executeScript({target:{tabId,allFrames:true},world:cmd==='market:kream:displayed-schema'?'MAIN':'ISOLATED',func:cmd==='market:kream:displayed-schema'?readDisplayedTable:readSavedMarginSettings,args:cmd==='market:kream:displayed-schema'?[payload.productCode]:[]});
+    for(const frame of frames)if(frame.result)values.push(...(Array.isArray(frame.result)?frame.result:[frame.result]));
+  }
+  const unique=new Map(values.map(v=>{const {observedAt,...stable}=v;return [JSON.stringify(stable),v];}));
+  if(unique.size>1)throw Error('NO1_SCHEMA_AMBIGUOUS');
+  const value=unique.values().next().value;
+  if(!value&&cmd==='market:margin-settings')throw Error('NO1_SCHEMA_NOT_AVAILABLE');
+  return projectData(cmd,value||{available:false,reason:'MATCHING_PRICE_TABLE_NOT_OPEN'},payload);
 }
 
 async function setStatus(code) { await chrome.storage.local.set({lastStatus: code, lastCheckedAt: new Date().toISOString()}); }
 async function poll() {
   if (busy) return;
-  clearTimeout(nextPoll);busy = true;let repeat=false,delay=0;
+  clearTimeout(nextPoll);busy = true;let repeat=false,delay=0;const generation=connectionGeneration;
   try {
     const {enabled, bridgeKey} = await chrome.storage.local.get(['enabled', 'bridgeKey']);
     if (!enabled || !/^[a-f0-9]{64}$/.test(bridgeKey || '')) return;
     repeat=true;
     const {job} = await localRequest(bridgeKey, '/next?wait=20000');
+    if(generation!==connectionGeneration)return;
     if (!job) return;
     let result;
     try {
       if (typeof job.id !== 'string' || !Number.isFinite(job.deadline) || job.deadline <= Date.now()) throw Error('NO1_BRIDGE_TIMEOUT');
       validateCommand(job.cmd, job.payload);
-      const token = await existingWebToken();
-      if (PRODUCT_COMMANDS.includes(job.cmd)) {
+      const {token,tabIds} = await existingWebToken();
+      const pageOnly=['market:margin-settings','market:kream:displayed-schema'].includes(job.cmd);
+      if (!pageOnly&&PRODUCT_COMMANDS.includes(job.cmd)) {
         const settings = await relayRequest({cmd: 'settings:get', token});
         if (settings.kreamApiBrowser !== 'electron') throw Error('NO1_BACKGROUND_MODE_REQUIRED');
         if (job.cmd.startsWith('market:kream:') || job.cmd === 'mecro:inventory:search') {
@@ -63,13 +79,13 @@ async function poll() {
           if (!state.isLoggedIn) throw Error('NO1_PLATFORM_LOGIN_REQUIRED');
         }
       }
-      const data = await relayRequest({cmd: job.cmd, payload: job.payload, token, timeoutMs: Math.min(job.cmd === 'stock:check' ? 90000 : 40000, Math.max(1, job.deadline - Date.now() - 1000))});
+      const data = pageOnly?await pageSchema(job.cmd,job.payload,tabIds):await relayRequest({cmd: job.cmd, payload: job.payload, token, timeoutMs: Math.min(['stock:check','market:kream:history:start'].includes(job.cmd) ? 95000 : 40000, Math.max(1, job.deadline - Date.now() - 1000))});
       result = {id: job.id, ok: true, data};
     } catch (error) { result = {id: job.id, ok: false, error: {code: safeCode(error.message)}}; }
     await localRequest(bridgeKey, '/result', result);
     await setStatus(result.ok ? 'VERIFIED_READ' : result.error.code);
-  } catch { delay=3000;await setStatus('NO1_BRIDGE_UNAVAILABLE'); }
-  finally { busy = false;if(repeat)nextPoll=setTimeout(()=>void poll(),delay); }
+  } catch { delay=3000;if(generation===connectionGeneration)await setStatus('NO1_BRIDGE_UNAVAILABLE'); }
+  finally { busy = false;if(repeat&&generation===connectionGeneration)nextPoll=setTimeout(()=>void poll(),delay); }
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, reply) => {
@@ -82,6 +98,7 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
       await chrome.alarms.create('no1-background-poll', {periodInMinutes: 0.5});
       void poll(); return {ok: true};
     }
+    connectionGeneration++;
     const {bridgeKey} = await chrome.storage.local.get('bridgeKey');
     await chrome.storage.local.set({enabled: false, lastStatus: 'DISCONNECTED'});
     clearTimeout(nextPoll);

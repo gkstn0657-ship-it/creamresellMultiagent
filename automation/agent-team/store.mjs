@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {writeJsonAtomic} from './atomic-json.mjs';
 import {marginReport} from './margin-report.mjs';
+import {marketSchemas} from './market-schema.mjs';
 export const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const uid = prefix => `${prefix}-${crypto.randomUUID()}`;
 export const proposalHash = p => digest({decision:p.decision,reason:p.reason,basis:p.basis,unresolved:p.unresolved});
@@ -26,7 +27,7 @@ export class TeamStore {
     this.data.observations.push(entry);this.save();return entry;
   }
   read(id) {const item=[...this.data.observations,...this.data.calculations].find(x=>x.id===id);if(!item)throw Error('OBSERVATION_NOT_FOUND');return item;}
-  summary() {return {...this.data,margins:marginReport(this.data.observations),observations:this.data.observations.filter(x=>x.active!==false).map(({payload,...x})=>({...x,summary:payload.summary||payload.queryStatus||payload.tool||null})),calculations:this.data.calculations.filter(x=>x.active!==false),events:this.data.events.slice(-12)};}
+  summary() {return {...this.data,margins:marginReport(this.data.observations),marketSchemas:marketSchemas(this.data.observations),observations:this.data.observations.filter(x=>x.active!==false).map(({payload,...x})=>({...x,summary:payload.summary||payload.queryStatus||payload.tool||null})),calculations:this.data.calculations.filter(x=>x.active!==false),events:this.data.events.slice(-12)};}
 }
 
 export function calculateScenario(args) {
@@ -75,6 +76,6 @@ export function publishAssessment(store,args,threadId) {
   if(!review||review.threadId===threadId||review.basis!==store.basis()||review.proposalHash!==proposalHash(args)||review.verdict!=='pass')throw Error('INDEPENDENT_CURRENT_REVIEW_REQUIRED');
   const gaps=[...new Set([...evidenceGaps(store),...args.unresolved])];
   const result={...args,id:uid('assessment'),threadId,at:new Date().toISOString(),evidenceBasis:store.basis(),unresolved:gaps,
-    readiness:gaps.length?'research_only':'evidence_reviewed',confirmedProfit:null,purchaseAuthorized:false,margins:marginReport(store.data.observations)};
+    readiness:gaps.length?'research_only':'evidence_reviewed',confirmedProfit:null,purchaseAuthorized:false,margins:marginReport(store.data.observations),marketSchemas:marketSchemas(store.data.observations)};
   store.data.assessment=result;store.save();return result;
 }

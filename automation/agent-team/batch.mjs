@@ -6,6 +6,7 @@ import {runTeam} from './run.mjs';
 import {digest} from './store.mjs';
 import {writeJsonAtomic as write} from './atomic-json.mjs';
 import {marginReport} from './margin-report.mjs';
+import {marketSchemas} from './market-schema.mjs';
 const packetSnapshot=(dir,id)=>path.join(dir,'packets',`snapshot-${id}.json`);
 function saveCollection(dir,groups,packets){
  // Immutable snapshots let an interrupted refresh keep the previous manifest usable.
@@ -75,6 +76,7 @@ export async function runBatch({seeds,dir,concurrency=2,collect,collectDiscovere
           }
         }catch(e){row={productId:packet.productId,status:'needs_attention',error:e.message};}
         row.margins=marginReport(packet.observations);
+        row.marketSchemas=marketSchemas(packet.observations);
         state.results.push(row);state.judged++;write(stateFile,state);emit({type:'product_judged',productId:packet.productId,status:row.status,decision:row.assessment?.decision});
       }
     }));

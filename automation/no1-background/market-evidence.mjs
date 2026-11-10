@@ -1,5 +1,5 @@
 import {sizeKey} from './size-binding.mjs';
-const connectionBlocked=e=>/^(NO1_AUTH_REQUIRED|NO1_PLATFORM_LOGIN_REQUIRED|KREAM_LOGIN_REQUIRED|KREAM_TOKEN_EXPIRED|NO1_BACKGROUND_MODE_REQUIRED|NO1_WEB_TAB_REQUIRED|ELECTRON_OFFLINE|ELECTRON_DISCONNECTED|NO_ELECTRON_CONNECTED)$/.test(e.message);
+const connectionBlocked=e=>/^(NO1_AUTH_REQUIRED|NO1_MULTIPLE_WEB_SESSIONS|NO1_CONNECTOR_UPDATE_REQUIRED|NO1_PLATFORM_LOGIN_REQUIRED|KREAM_LOGIN_REQUIRED|KREAM_TOKEN_EXPIRED|NO1_BACKGROUND_MODE_REQUIRED|NO1_WEB_TAB_REQUIRED|ELECTRON_OFFLINE|ELECTRON_DISCONNECTED|NO_ELECTRON_CONNECTED)$/.test(e.message);
 export function summarizeTrades(pages,{now=Date.now(),size,scope='all_product_options'}={}){
   const seen=new Set(),items=[],issues=new Set(),cutoff=now-30*86400000;
   for(const page of pages){
@@ -51,10 +51,16 @@ export function settlementBreakdown(preview){
     reconciled,shippingCost:null,actualSettlementConfirmed:false,
     basis:'No1 account preview amounts, including current fee event; no percentage or shipping assumption.'};
 }
-export async function marketEvidence(client,args,prices,{maxPages=3,maxSelectedPages=3,now=Date.now()}={}){
+export async function marketEvidence(client,args,prices,{maxPages=3,maxSelectedPages=3,now=Date.now(),schema=false}={}){
   if(!Number.isSafeInteger(maxPages)||maxPages<1||maxPages>10||!Number.isSafeInteger(maxSelectedPages)||maxSelectedPages<0||maxSelectedPages>10)throw Error('MARKET_PAGE_BUDGET_INVALID');
   const errors={},result={observedAt:new Date(now).toISOString(),priceMeaning:{buyPrice:'lowest normal seller ask; not guaranteed proceeds',sellPrice:'highest buyer bid; immediate sale quote before fees',source:'No1 1.35.8 buildMarketPrices / parseSizeOptions, statically verified'},details:null,trades:null,selectedTrades:null,settlement:null};
-  try{result.details=await client.request('market:kream:details',{productCode:args.kreamId,includeFastDelivery:false});}catch(e){errors.details=e.message;if(connectionBlocked(e))return {...result,errors};}
+  try{result.details=await client.request('market:kream:details',{productCode:args.kreamId,includeFastDelivery:schema});}catch(e){errors.details=e.message;if(connectionBlocked(e))return {...result,errors};}
+  if(schema){
+    for(const [key,cmd,payload] of [['marginSettings','market:margin-settings',{}],['displayedSchema','market:kream:displayed-schema',{productCode:args.kreamId}],['sales30d','market:kream:history:start',{productCode:args.kreamId,useSharedSales30d:true}]]){
+      try{result[key]=await client.request(cmd,payload);if(result[key]?.errorCode)errors[key]=result[key].errorCode;}
+      catch(e){errors[key]=e.message;if(connectionBlocked(e))return {...result,errors};}
+    }
+  }
   const matches=args.option?prices.prices.filter(x=>sizeKey(x.size)===sizeKey(args.option)):[];
   result.selectedPrice=matches.length===1?matches[0]:null;
   if(args.option&&matches.length!==1)errors.option='MARKET_SIZE_AMBIGUOUS';
@@ -72,7 +78,8 @@ export async function marketEvidence(client,args,prices,{maxPages=3,maxSelectedP
       if(selected.error){errors.selectedTrades=selected.error.message;if(connectionBlocked(selected.error))return {...result,errors};}
     }
     // One item per request avoids No1's cross-option fee interpolation.
-    const scenarios=[{price:p.sellPrice,isInstant:true},{price:p.buyPrice,isInstant:false}].filter(x=>Number.isSafeInteger(x.price)&&x.price>0);
+    const detail=result.details?.sizeOptions?.find(x=>x.option===p.option&&sizeKey(x.size)===sizeKey(p.size));
+    const scenarios=[{price:detail?.highestBid??p.sellPrice,isInstant:true},{price:detail?.lowestNormal??p.buyPrice,isInstant:false},...(schema?[{price:detail?.fastDeliveryPrice,isInstant:false}]:[])].filter((x,n,a)=>Number.isSafeInteger(x.price)&&x.price>0&&a.findIndex(y=>y.price===x.price&&y.isInstant===x.isInstant)===n);
     result.settlement=[];
     for(const item of scenarios)try{
       const response=await client.request('market:kream:askPreviewBatch',{productCode:args.kreamId,items:[{option:p.option,...item}]});
