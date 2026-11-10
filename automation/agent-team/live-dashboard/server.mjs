@@ -27,8 +27,12 @@ export function liveDashboardData(root=defaultRoot,workId){
  const ids=safeWorkId(workId)?[workId]:fs.existsSync(orders)?fs.readdirSync(orders).filter(n=>safeWorkId(n.replace(/\.json$/,''))).map(n=>n.replace(/\.json$/,'')):[];
  const works=ids.map(id=>read(path.join(orders,id+'.json'))).filter(Boolean).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
  const work=works.find(w=>w.status!=='stopped')||works[0];
- if(!work)return {version:1,observedAt:new Date().toISOString(),status:'not_started',workerAlive:false,checked:0,qualified:0,recent:[],events:[]};
+ if(!work)return {version:1,observedAt:new Date().toISOString(),status:'not_started',workerAlive:false,checked:0,qualified:0,lookupSkippedCount:0,lookupSkipped:[],recent:[],events:[]};
  const dir=path.join(root,'explorations',work.id),state=read(path.join(dir,'state.json'))||{};
+ const lookupSkipped=[...new Map((state.skipped||[]).filter(s=>s.lookupFailed===true).map(s=>[String(s.sourceId),s])).values()].reverse().map(s=>({
+  sourceId:String(s.sourceId),name:firstLine(s.productName)||null,reason:firstLine(s.reason),attempts:Number.isSafeInteger(s.attempts)&&s.attempts>0?s.attempts:null,at:s.at&&Number.isFinite(Date.parse(s.at))?s.at:null,
+  url:/^\d{1,12}$/.test(String(s.sourceId))?`https://www.musinsa.com/products/${s.sourceId}`:null,
+ }));
  const monitor=read(path.join(dir,'monitor.json'));
  const remoteMonitor=read(path.join(dir,'remote-monitor.json'));
  const monitorFresh=monitor?.at&&Date.now()-Date.parse(monitor.at)<30000;
@@ -54,6 +58,7 @@ export function liveDashboardData(root=defaultRoot,workId){
  return {
   version:1,observedAt:new Date().toISOString(),workId:work.id,status,workerAlive,continuous:work.continuous===true,
   checked:state.checkedSources||0,qualified:state.profitableProductsFound||0,initialTarget:work.targetProfitableProducts||null,
+  lookupSkippedCount:lookupSkipped.length,lookupSkipped:lookupSkipped.slice(0,50),
   judged,reviewed,adopted,held,excluded,pendingPackets:state.pendingSourceIds?.length||0,retrySources:state.retrySources?.length||0,
   current:{category:state.currentCategory||null,rank:state.currentSource?.rank||null,name:state.currentSource?.productName||null,sourceId:state.currentSource?.productId||null},
   lastBatch:{runId:state.currentRunId||null,status:current?.status||null,productCount:current?.productCount||0,judged:current?.judged||0},

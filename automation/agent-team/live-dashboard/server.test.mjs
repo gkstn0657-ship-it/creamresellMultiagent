@@ -1,5 +1,13 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {liveDashboardData,createDashboardServer,startDashboardWork} from './server.mjs';
+test('skipped lookup list distinguishes failed queries from screening exclusions and preserves actual attempts',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'cream-skipped-')),id='work-11111111-2222-3333-4444-555555555555',dir=path.join(root,'explorations',id);
+ fs.mkdirSync(path.join(root,'work-orders'),{recursive:true});fs.mkdirSync(dir,{recursive:true});
+ fs.writeFileSync(path.join(root,'work-orders',id+'.json'),JSON.stringify({id,status:'open'}));
+ fs.writeFileSync(path.join(dir,'state.json'),JSON.stringify({skipped:[{sourceId:'1',reason:'NO_AVAILABLE_STOCK'},{sourceId:'2',lookupFailed:true,reason:'STOCK_CHECK_FAILED',attempts:4},{sourceId:'3',productName:'상품 이름',lookupFailed:true,reason:'NO1_RELAY_TIMEOUT',attempts:2,at:'2026-11-10T17:00:00Z'},{sourceId:'bad/path',lookupFailed:true,reason:'STOCK_CHECK_FAILED'},{sourceId:'2',lookupFailed:true,reason:'STOCK_CHECK_FAILED',attempts:4}]}));
+ const data=liveDashboardData(root,id);assert.equal(data.lookupSkippedCount,3);assert.equal(data.lookupSkipped.find(s=>s.sourceId==='2').attempts,4);assert.equal(data.lookupSkipped.find(s=>s.sourceId==='2').name,null);assert.equal(data.lookupSkipped.find(s=>s.sourceId==='3').url,'https://www.musinsa.com/products/3');assert.equal(data.lookupSkipped.find(s=>s.sourceId==='bad/path').url,null);assert.ok(!data.lookupSkipped.some(s=>s.sourceId==='1'));
+ assert.deepEqual(liveDashboardData(fs.mkdtempSync(path.join(os.tmpdir(),'cream-empty-'))).lookupSkipped,[]);
+});
 test('dashboard reports waiting as waiting and shows only saved reviewed results',async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cream-live-desk-')),id='work-11111111-2222-3333-4444-555555555555',batch='batch-11111111-2222-3333-4444-555555555555',dir=path.join(root,'explorations',id);
  fs.mkdirSync(path.join(root,'work-orders'),{recursive:true});fs.mkdirSync(dir,{recursive:true});fs.mkdirSync(path.join(root,batch),{recursive:true});

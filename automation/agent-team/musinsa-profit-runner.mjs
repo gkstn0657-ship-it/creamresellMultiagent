@@ -39,7 +39,7 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
     const skipFailedLookup=(source,reason,attempts)=>{
       state.checkedSources++;seenSources.add(source.productId);memory.seenSourceIds=[...seenSources];
       state.retrySources=(state.retrySources||[]).filter(s=>s.productId!==source.productId);
-      state.skipped.push({sourceId:source.productId,kreamId:null,reason,code:classifyError({reason}).code,lookupFailed:true,attempts});
+      state.skipped.push({sourceId:source.productId,productName:source.productName||null,kreamId:null,reason,code:classifyError({reason}).code,lookupFailed:true,attempts,at:new Date().toISOString()});
       state.status='discovering';
       emit({type:'source_lookup_skipped',sourceId:source.productId,rank:source.rank,reason,attempts,at:new Date().toISOString()});
     };

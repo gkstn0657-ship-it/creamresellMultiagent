@@ -50,6 +50,22 @@ function renderEvents(data){
  if(!data.events.length){list.append(node('p','empty','기록이 쌓이면 여기에 표시됩니다.'));return;}
  for(const e of data.events){const warning=/retry|wait/.test(e.type),error=/attention|exhausted/.test(e.type);const row=node('div',`event-row ${error?'error':warning?'warning':''}`);row.append(node('span','event-dot'),node('span','',eventText(e)));list.append(row);}
 }
+function renderSkipped(data){
+ const list=el('skipped-list');if(!list)return;
+ list.replaceChildren();
+ if(!Array.isArray(data.lookupSkipped)){set('skipped-count','확인 중');list.append(node('p','empty','새 대시보드 서버에서 실패 기록을 불러옵니다.'));return;}
+ const rows=data.lookupSkipped;set('skipped-count',`${format(data.lookupSkippedCount)}개`);
+ set('skipped-footnote',rows.length?`최근 ${format(rows.length)}개 표시 · 시도 횟수는 최초 조회 포함 · 상품명이 없는 이전 기록은 번호로 표시`: '');
+ if(!rows.length){list.append(node('p','empty','아직 조회 실패로 건너뛴 상품이 없습니다.'));return;}
+ const reasons={STOCK_CHECK_FAILED:'재고 조회 실패',KREAM_SEARCH_FAILED:'KREAM 검색 실패',MUSINSA_BENEFIT_FETCH_FAILED:'혜택 조회 실패',NO1_BRIDGE_TIMEOUT:'상품 조회 시간초과',NO1_RELAY_TIMEOUT:'상품 응답 시간초과'};
+ for(const r of rows){
+  const row=node('div','skipped-row'),main=node('div','skipped-main'),link=node(r.url?'a':'span','skipped-product',r.name||`무신사 #${r.sourceId}`);
+  if(r.url){link.href=r.url;link.target='_blank';link.rel='noopener noreferrer';}
+  main.append(link,node('small','',`#${r.sourceId} · ${reasons[r.reason]||r.reason}`));
+  const meta=node('div','skipped-meta');meta.append(node('span','skip-badge',r.attempts?`${r.attempts}회 시도`:'횟수 미기록'),node('small','',r.at?kst(r.at):'시간 미기록'));
+  row.append(main,meta);list.append(row);
+ }
+}
 function render(data){
  snapshot=data;renderStart(data);const active=data.workerAlive&&['discovering','judging','recovering'].includes(data.status);
  const waiting=data.status==='waiting',offline=data.status==='offline'||data.status==='stopped';
@@ -77,7 +93,7 @@ function render(data){
  set('pipeline-note',waiting?'현재 탐색은 일시 중단됐습니다. 아래 최근 판단은 이전에 완료된 기록입니다.':'통과는 재고·마진·판매 근거와 독립 검토를 모두 확인한 상품만 셉니다.');
  set('rank',data.current.rank?`#${data.current.rank}`:'—');set('category',data.current.category||'—');
  set('current-product',data.current.name||'현재 상품 기록이 없습니다.');set('current-id',data.current.sourceId?`무신사 상품 #${data.current.sourceId}`:'저장된 위치에서 이어집니다');
- renderResults(data);renderEvents(data);tickClock();
+ renderResults(data);renderEvents(data);renderSkipped(data);tickClock();
 }
 async function refresh(){
  try{const response=await fetch('/api/state',{cache:'no-store',signal:AbortSignal.timeout(6000)});if(!response.ok)throw Error('DATA_UNAVAILABLE');render(await response.json());}
