@@ -7,6 +7,14 @@ function fixture(overrides = {}) {
   const responses = {'settings:get': {kreamApiBrowser: 'electron'}, 'stock:check': {makerNumber: args.model, productNumber: '7481180', combinedOptions: [{firstOption: '(19)BLACK', size: 'L(100)', limitedQty: 40}]}, 'musinsa:product:benefit': {productId: '7481180', styleNo: args.model, maxBenefitPrice: 355280}, 'market:kream:prices': {prices: [{size: 'L', sellPrice: 380000}]}, ...overrides};
   return {calls, status: async () => ({connectorVersion: '0.2.0'}), request: async (cmd, payload) => { calls.push({cmd, payload}); return responses[cmd]; }};
 }
+test('ranking connector 0.7 retains full product and market schema collection', async () => {
+  const client=fixture({'market:kream:trades':{items:[],hasNext:false}});client.status=async()=>({connectorVersion:'0.7.0'});
+  const result=await probeProduct(client,args);
+  assert.equal(result.stock.selectedStockQuantity,40);
+  assert.equal(client.calls.find(c=>c.cmd==='market:kream:details').payload.includeFastDelivery,true);
+  assert.ok(client.calls.some(c=>c.cmd==='market:kream:history:start'));
+  assert.ok(client.calls.some(c=>c.cmd==='market:margin-settings'));
+});
 test('one-product background probe preserves unknown freshness and cannot approve a purchase', async () => {
   const client = fixture(); const result = await probeProduct(client, args);
   assert.equal(result.stock.selectedStockQuantity, 40); assert.equal(result.benefits.maxBenefitPrice, 355280);

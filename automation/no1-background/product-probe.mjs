@@ -17,7 +17,7 @@ export async function probeProduct(client, args) {
   const productId = args.productUrl.split('/').at(-1);
   const startedAt = new Date().toISOString();
   const local = await client.status();
-  if (!['0.2.0','0.3.0','0.4.0','0.5.0','0.6.0'].includes(local.connectorVersion)) throw Error('NO1_CONNECTOR_UPDATE_REQUIRED');
+  if (!['0.2.0','0.3.0','0.4.0','0.5.0','0.6.0','0.7.0'].includes(local.connectorVersion)) throw Error('NO1_CONNECTOR_UPDATE_REQUIRED');
   const settings = await client.request('settings:get');
   if (settings.kreamApiBrowser !== 'electron') throw Error('NO1_BACKGROUND_MODE_REQUIRED');
   const stock = await client.request('stock:check', {url: args.productUrl});
@@ -36,7 +36,7 @@ export async function probeProduct(client, args) {
   catch (error) { errors.market = safeCode(error.message); }
   let marketResearch=null;
   const binding=market?matchMarketSize({stock,productUrl:args.productUrl,kreamId:args.kreamId,sourceSize:args.option,prices:market.prices}):null;
-  if(market&&['0.3.0','0.4.0','0.5.0','0.6.0'].includes(local.connectorVersion))marketResearch=await marketEvidence(client,{...args,option:binding?.price.size||args.option},market,{schema:local.connectorVersion==='0.6.0'});
+  if(market&&['0.3.0','0.4.0','0.5.0','0.6.0','0.7.0'].includes(local.connectorVersion))marketResearch=await marketEvidence(client,{...args,option:binding?.price.size||args.option},market,{schema:['0.6.0','0.7.0'].includes(local.connectorVersion)});
   if(marketResearch)for(const [key,value] of Object.entries(marketResearch.errors))errors['market_'+key]=value;
   return {
     mode: 'background-relay', queryStatus: Object.keys(errors).length ? 'partial' : 'complete', errors, startedAt, observedAt: new Date().toISOString(), request: args,
