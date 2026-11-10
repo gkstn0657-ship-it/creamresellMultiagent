@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {startWork,workOrders,workSummary} from './work-orders.mjs';
+import {startWork,workOrders,workSummary,continueWorkUntilStopped} from './work-orders.mjs';
 import {makePacket} from './packets.mjs';
 import {matchRankingModels,rankingSizeMatch,qualifyRankingResult} from './musinsa-ranking-collector.mjs';
 import {runMusinsaProfitSearch} from './musinsa-profit-runner.mjs';
@@ -52,4 +52,12 @@ test('interrupted collection preserves queued packets and category cursor for th
   fs.unlinkSync(stopFile);
   const second=await runMusinsaProfitSearch({root,workId:w.workId,client,collect:async()=>assert.fail('saved packet must not be recollected'),execute:async()=>({status:'complete',judged:1,results:[adopted(1)]})});
   assert.equal(second.status,'complete');assert.equal(second.profitableProductsFound,1);assert.equal(collects,1);
+});
+test('explicit continuous scope keeps collecting after the initial profit target',async()=>{
+  const root=temp(),w=startWork(root,{targetProfitableProducts:1,userInstruction:'find one profitable',requestId:'continuous'});
+  const scope=continueWorkUntilStopped(root,w.workId);assert.equal(scope.continuous,true);assert.equal(scope.remainingProducts,5);
+  const calls=[],client={request:async cmd=>cmd.endsWith('settings')?{category:'103000',period:'REALTIME',gender:'A',ageBand:'AGE_BAND_ALL'}:{products:[1,2].map(n=>({rank:n,productId:String(n),productName:'jacket',brandName:'brand'}))}};
+  const result=await runMusinsaProfitSearch({root,workId:w.workId,client,collect:async s=>{calls.push(s.productId);return {status:'collected',kreamId:s.productId,packet:packet(s.productId)};},execute:async({seeds})=>({status:'complete',judged:seeds.length,results:seeds.map(s=>adopted(s.kreamId))})});
+  assert.deepEqual(calls,['1','2']);assert.equal(result.profitableProductsFound,2);assert.equal(result.status,'source_exhausted');
+  const summary=workSummary(root,workOrders(root)[0]);assert.equal(summary.remainingToInitialTarget,0);assert.equal(summary.remainingProducts,5);
 });

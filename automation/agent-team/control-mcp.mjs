@@ -7,12 +7,13 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {analysisProfile,MUSINSA_PROFILE} from './analysis-profiles.mjs';
 import {groupProducts} from './packets.mjs';
 import {panelData} from './panel-data.mjs';
-import {workPolicy,workOrders,scopeStatus,startWork,reserveWork,stopWork,reopenWork,withWorkLock,explorationState} from './work-orders.mjs';
+import {workPolicy,workOrders,scopeStatus,startWork,reserveWork,stopWork,reopenWork,continueWorkUntilStopped,withWorkLock,explorationState} from './work-orders.mjs';
 import {startExploration,discoveryStatus} from './exploration.mjs';
 export const PANEL_URI='ui://cream/management-v2.html';
 const PANEL_FILE=fileURLToPath(new URL('./panel-ui/dist/panel.html',import.meta.url));
 const ROOT=fileURLToPath(new URL('../../kream-runs/agent-teams/',import.meta.url));
 const BATCH=fileURLToPath(new URL('./batch.mjs',import.meta.url));
+const CONTINUOUS=fileURLToPath(new URL('./musinsa-continuous.mjs',import.meta.url));
 const object=(properties,required=Object.keys(properties))=>({type:'object',properties,required,additionalProperties:false});
 const runId={type:'string',pattern:'^batch-[a-f0-9-]{36}$'},str={type:'string'};
 const workId={type:'string',pattern:'^work-[a-f0-9-]{36}$'},eventId={type:'string',pattern:'^evt-[a-f0-9]{64}$'};
@@ -23,6 +24,7 @@ export const controlTools=[
   {name:'cream_panel_data',description:'Refresh Cream management data or read one product detail. Does not collect products, run models, or open desktop windows.',inputSchema:object({runId,productId:str},[]),_meta:{ui:{visibility:['app','model']}}},
   {name:'cream_work_start',description:'Open a new work order ONLY after the user specifies the number of products or answers the scope question. Ask how many at the start of each new user work request; never silently choose 100. Record their actual instruction. Does not launch collection. Reuse requestId on retries.',inputSchema:object({targetProducts:{type:'integer',minimum:1},userInstruction:str,requestId:{type:'string',minLength:1,maxLength:160}})},
   {name:'cream_musinsa_profit_work_start',description:'Open a Musinsa ranking work order only when the user explicitly requests finding N profitable candidates, not merely inspecting N products. Counts distinct independently reviewed adopted candidates with positive margin, available matched stock and recent sales evidence. No purchases.',inputSchema:object({targetProfitableProducts:{type:'integer',minimum:1},userInstruction:str,requestId:{type:'string',minLength:1,maxLength:160}})},
+  {name:'cream_musinsa_work_continue',description:'When the user explicitly requests continuous Musinsa ranking exploration until stopped, extend an existing profit work order and launch its background PC supervisor. Saved ranking position and cross-request deduplication remain. No purchases.',inputSchema:object({workId})},
   {name:'cream_work_stop',description:'Stop the specified work order and request interruption of its batches. Retains results and prevents further automatic starts in that scope.',inputSchema:object({workId})},
   {name:'cream_explore_start',description:'Start deterministic full-catalog exploration for an existing user-confirmed work order. Continues the saved popularity-feed cursor and category rotation across separate user requests; no discovery AI. The PC automatically runs all remaining batches within N (5 per batch, 2 product AI agents). Do not supply handpicked seeds or launch another batch from completion events while this runner manages the work. Retry with the same workId. Set resume=true only for an explicit continuation of interrupted work.',inputSchema:object({workId,resume:{type:'boolean'}},['workId'])},
   {name:'cream_discovery_status',description:'Read persistent discovery cursor, category queues, coverage limitations and work progress. No collection or AI calls.',inputSchema:object({},[])},
@@ -55,6 +57,15 @@ export async function control(name,args={},options={}) {
   if(name==='cream_panel_ready')return {acknowledged:true,scope:'local-ui-test'};
   if(name==='cream_open_panel'||name==='cream_panel_data')return panelData(args,options);
   if(['cream_work_start','cream_musinsa_profit_work_start'].includes(name))return withWorkLock(root,()=>startWork(root,args));
+  if(name==='cream_musinsa_work_continue')return withWorkLock(root,async()=>{
+    const summary=continueWorkUntilStopped(root,args.workId),dir=path.join(root,'explorations',args.workId),lock=path.join(dir,'continuous.lock');
+    if(fs.existsSync(lock)){try{process.kill(Number(fs.readFileSync(lock,'utf8')),0);return {...summary,launched:false,reused:true};}catch{}}
+    if(options.launchContinuous)return {...summary,...await options.launchContinuous({root,workId:args.workId})};
+    fs.mkdirSync(dir,{recursive:true});const output=fs.openSync(path.join(dir,'continuous.log'),'a');
+    const child=spawn(process.execPath,[CONTINUOUS,`--root=${root}`,`--work=${args.workId}`],{cwd:fileURLToPath(new URL('../../',import.meta.url)),windowsHide:true,detached:true,stdio:['ignore',output,output]});
+    try{await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});}finally{fs.closeSync(output);}
+    child.unref();return {...summary,launched:true,pid:child.pid};
+  });
   if(name==='cream_work_stop')return withWorkLock(root,()=>stopWork(root,args.workId));
   if(name==='cream_explore_start')return startExploration(root,args,options);
   if(name==='cream_discovery_status')return {discovery:discoveryStatus(root),work:scopeStatus(root)};

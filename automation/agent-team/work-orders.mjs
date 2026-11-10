@@ -16,10 +16,17 @@ export function workSummary(root,work){
  const reserved=entries.reduce((n,e)=>n+e.productCount,0),activeRunIds=entries.filter(e=>e.workerAlive&&!['complete','stopped','needs_attention','prefetching','prefetched'].includes(e.status)).map(e=>e.runId);
  const qualifiedProductIds=[...new Set(entries.flatMap(e=>e.qualifiedProductIds))];
  const profitTarget=work.scopeMode==='profitable-results';
- const remaining=Math.max(0,profitTarget?work.targetProfitableProducts-qualifiedProductIds.length:work.targetProducts-reserved);
+ const remainingToInitialTarget=Math.max(0,profitTarget?work.targetProfitableProducts-qualifiedProductIds.length:work.targetProducts-reserved);
+ const remaining=work.continuous===true?workPolicy.maxBatchProducts:remainingToInitialTarget;
  const exploration=explorationState(root,work.id);
  const status=work.status==='stopped'?'stopped':activeRunIds.length||exploration?.workerAlive?'running':['needs_attention','source_exhausted'].includes(exploration?.status)?exploration.status:remaining?'ready':entries.every(e=>e.status==='complete')?'complete':'needs_attention';
- return {workId:work.id,status,...(profitTarget?{scopeMode:work.scopeMode,targetProfitableProducts:work.targetProfitableProducts,profitableProductsFound:qualifiedProductIds.length,qualifiedProductIds}:{}),targetProducts:work.targetProducts,reservedProducts:reserved,remainingProducts:remaining,judgedProducts:entries.reduce((n,e)=>n+e.judged,0),activeRunIds,entries,exploration,createdAt:work.createdAt,userInstruction:work.userInstruction,policy:workPolicy};
+ return {workId:work.id,status,continuous:work.continuous===true,...(profitTarget?{scopeMode:work.scopeMode,targetProfitableProducts:work.targetProfitableProducts,profitableProductsFound:qualifiedProductIds.length,qualifiedProductIds}:{}),targetProducts:work.targetProducts,reservedProducts:reserved,remainingProducts:remaining,remainingToInitialTarget,judgedProducts:entries.reduce((n,e)=>n+e.judged,0),activeRunIds,entries,exploration,createdAt:work.createdAt,userInstruction:work.userInstruction,policy:workPolicy};
+}
+export function continueWorkUntilStopped(root,workId){
+ const work=workOrders(root).find(w=>w.id===workId);
+ if(!work||work.scopeMode!=='profitable-results'||work.status==='stopped')throw Error('ACTIVE_MUSINSA_WORK_REQUIRED');
+ work.continuous=true;writeJsonAtomic(path.join(orderDir(root),work.id+'.json'),work);
+ return workSummary(root,work);
 }
 export function currentWork(root){return workOrders(root).find(w=>{const s=workSummary(root,w);return w.status!=='stopped'&&(s.status!=='complete');})||null;}
 export function scopeStatus(root,{eventId}={}){

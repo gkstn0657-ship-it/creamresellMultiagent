@@ -33,6 +33,7 @@ export async function collectRankingCandidate(candidate,{client,onEvidence=()=>{
   const stock=await cached.request('stock:check',{url:candidate.productUrl});
   if(!stock.combinedOptions?.some(available))return {status:'skipped',reason:'NO_AVAILABLE_STOCK'};
   const model=String(stock.makerNumber||'').trim();if(!model||model==='-')return {status:'skipped',reason:'SOURCE_MODEL_MISSING'};
+  if(!/^[\p{L}\p{N}][\p{L}\p{N} ._()/+-]{0,99}$/u.test(model))return {status:'skipped',reason:'UNSUPPORTED_SOURCE_MODEL_FORMAT'};
   const items=[],cursors=new Set();let cursor='1';
   for(let page=0;page<3;page++){
     if(cursors.has(cursor))break;cursors.add(cursor);

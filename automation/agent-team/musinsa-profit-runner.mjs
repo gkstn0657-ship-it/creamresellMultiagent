@@ -5,9 +5,10 @@ import {collectRankingCandidate,qualifyRankingResult} from './musinsa-ranking-co
 import {workOrders,workSummary,reserveWork,withWorkLock} from './work-orders.mjs';
 import {runBatch} from './batch.mjs';import {groupProducts} from './packets.mjs';import {digest} from './store.mjs';
 import {writeJsonAtomic as write} from './atomic-json.mjs';
+import {recoveringClient} from './source-recovery.mjs';
 const read=p=>fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):null;
 const idFor=(work,n)=>'batch-'+crypto.createHash('sha256').update(`musinsa-profit:${work}:${n}`).digest('hex').slice(0,32).replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5');
-export async function runMusinsaProfitSearch({root,workId,client=new BackgroundClient(),collect=collectRankingCandidate,execute=runBatch,onEvent=()=>{}}){
+export async function runMusinsaProfitSearch({root,workId,client=new BackgroundClient(),collect=collectRankingCandidate,execute=runBatch,onEvent=()=>{},recovery={}}){
   const work=workOrders(root).find(w=>w.id===workId);
   if(!work||work.scopeMode!=='profitable-results'||work.status==='stopped')throw Error('PROFIT_TARGET_WORK_REQUIRED');
   const dir=path.join(root,'explorations',workId);fs.mkdirSync(dir,{recursive:true});
@@ -22,6 +23,10 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
   const emit=e=>{onEvent(e);save();};
   let pending=(state.pendingSourceIds||[]).map(id=>read(path.join(sourceDir,'evidence',id,'packet.json')));
   if(pending.some(p=>!p))throw Error('PENDING_PACKET_MISSING');
+  client=recoveringClient(client,{...recovery,stopped:stop,onRecovery:e=>{
+    state.recovery={...e,sourceId:state.currentSource?.productId||null,at:new Date().toISOString()};
+    state.status=e.type==='source_retry'?'recovering':e.type==='source_recovered'?'discovering':'needs_attention';emit(e);
+  }});
   try{
     const settings=projectRankingSettings(await client.request('musinsa:ranking:settings',{}));
     if(state.settings&&JSON.stringify(state.settings)!==JSON.stringify(settings))throw Error('RANKING_SETTINGS_CHANGED');state.settings=settings;
@@ -53,16 +58,24 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
       const request={section:'all',...settings,...(category==='000'?{}:{category})};if(category==='000')delete request.category;
       const feed=projectRankingProducts(await client.request('musinsa:ranking:products',request));
       emit({type:'ranking_loaded',category,count:feed.products.length});
-      for(const source of feed.products){
-        if(stop())break;if(updateProgress().remainingProducts===0)break;
+      const retrySources=(state.retrySources||[]).filter(s=>s.category===category&&!feed.products.some(p=>p.productId===s.productId));
+      for(const source of [...feed.products,...retrySources].sort((a,b)=>a.rank-b.rank)){
+        if(stop())break;if(!work.continuous&&updateProgress().remainingProducts===0)break;
         if(seenSources.has(source.productId))continue;
         state.currentSource={...source,category};state.status='discovering';save();
         const evidenceDir=path.join(sourceDir,'evidence',source.productId);fs.mkdirSync(evidenceDir,{recursive:true});
         let evidenceIndex=fs.readdirSync(evidenceDir).length;
         let result;try{
         result=await collect({...source,category,observedAt:new Date().toISOString()},{client,seenKreamIds:seenMarkets,onEvidence:async(cmd,payload,data)=>write(path.join(evidenceDir,`${++evidenceIndex}.json`),{cmd,payload,data,observedAt:new Date().toISOString()})});
-        }catch(e){if(/LOGIN|AUTH|BRIDGE|CONNECTOR|BACKGROUND|ELECTRON|RELAY|WEB_TAB/.test(e.message))throw e;result={status:'skipped',reason:String(e.message).slice(0,150)};}
+        }catch(e){
+          // Only an established product-specific mismatch is an exclusion.
+          // Infrastructure, malformed responses and unexpected bugs retain the
+          // source and cursor, and must reach the work-level failure handler.
+          if(!['NO1_OPTION_NOT_FOUND','NO1_IDENTITY_MISMATCH'].includes(e.message))throw e;
+          result={status:'skipped',reason:e.message};
+        }
         state.checkedSources++;seenSources.add(source.productId);memory.seenSourceIds=[...seenSources];
+        state.retrySources=(state.retrySources||[]).filter(s=>s.productId!==source.productId);
         // A failed offer must not hide a different merchant listing for the same
         // KREAM product. Deduplicate market IDs only once a packet is queued.
         if(result.kreamId&&result.status==='collected'){seenMarkets.add(result.kreamId);memory.seenKreamIds=[...seenMarkets];}
@@ -71,10 +84,22 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
         emit({type:'source_processed',sourceId:source.productId,rank:source.rank,status:result.status,reason:result.reason,kreamId:result.kreamId,pending:pending.length});
         if(pending.length>=Math.min(5,updateProgress().remainingProducts))await flush();
       }
-      await flush();if(stop()||updateProgress().remainingProducts===0)break;
+      await flush();if(stop()||!work.continuous&&updateProgress().remainingProducts===0)break;
     }
-    state.status=stop()?'stopped':updateProgress().remainingProducts===0?'complete':'source_exhausted';
-  }catch(e){state.status=stop()?'stopped':'needs_attention';state.error=String(e.message).slice(0,250);}
+    state.status=stop()?'stopped':!work.continuous&&updateProgress().remainingProducts===0?'complete':'source_exhausted';
+  }catch(e){
+    state.status=stop()?'stopped':'needs_attention';state.error=String(e.message).slice(0,250);
+    if(state.status==='needs_attention'){
+      if(state.currentSource&&!memory.seenSourceIds.includes(state.currentSource.productId)&&!(state.retrySources||[]).some(s=>s.productId===state.currentSource.productId))state.retrySources=[...(state.retrySources||[]),state.currentSource];
+      // Publish a real failed discovery attempt through the existing batch
+      // event outbox, without reserving products or overwriting a finished batch.
+      const at=new Date().toISOString(),id=idFor(workId,`failure:${at}:${state.error}`),failureDir=path.join(root,id);
+      fs.mkdirSync(failureDir,{recursive:true});
+      write(path.join(failureDir,'launch.json'),{workId,managedBy:'musinsa-profit-search',stage:'discovery'});
+      write(path.join(failureDir,'batch-state.json'),{mode:'live',status:'needs_attention',stage:'discovery',productCount:0,collected:0,judged:0,results:[],error:`MUSINSA_DISCOVERY: ${state.error}`,startedAt:at,finishedAt:at});
+      state.failureEventRunId=id;emit({type:'work_needs_attention',workId,error:state.error,failureEventRunId:id});
+    }
+  }
   finally{state.finishedAt=new Date().toISOString();save();if(fs.existsSync(lock)&&fs.readFileSync(lock,'utf8')===String(process.pid))fs.unlinkSync(lock);}
   return state;
 }
