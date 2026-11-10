@@ -13,5 +13,5 @@ export async function readRankingFeed(client,args={}) {
   const request={section:rankingPolicy.section,...settings};
   if(request.category==='000')delete request.category;
   const {products}=projectRankingProducts(await client.request('musinsa:ranking:products',request));
-  return {source:rankingPolicy.source,order:rankingPolicy.order,settings,section:request.section,observedAt:new Date().toISOString(),total:products.length,products:products.slice(0,args.limit??5),cursorAdvanced:false,purchaseAuthorized:false};
+  return {source:rankingPolicy.source,order:rankingPolicy.order,assessmentProfile:rankingPolicy.assessmentProfile,assessmentTool:rankingPolicy.assessmentTool,primaryCriteria:rankingPolicy.primaryCriteria,settings,section:request.section,observedAt:new Date().toISOString(),total:products.length,products:products.slice(0,args.limit??5),cursorAdvanced:false,purchaseAuthorized:false};
 }

@@ -1,3 +1,4 @@
+import {analysisProfile as validateProfile,MUSINSA_PROFILE,MUSINSA_MESSAGE} from './analysis-profiles.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -28,15 +29,17 @@ export async function prepareBatch({seeds,dir,collect,collectDiscovered,mode='li
   state.status='prefetched';state.collectionFinishedAt=new Date().toISOString();save();return state;
  }catch(e){state.status=stopped()||fs.existsSync(path.join(dir,'STOP'))?'stopped':'needs_attention';state.error=e.message;state.finishedAt=new Date().toISOString();save();throw e;}
 }
-export async function runBatch({seeds,dir,concurrency=2,collect,collectDiscovered,analyze=runTeam,mode='live',onEvent=()=>{},onCollected=()=>{},resume=false}={}) {
+export async function runBatch({seeds,dir,concurrency=2,collect,collectDiscovered,analyze=runTeam,mode='live',analysisProfile='general',onEvent=()=>{},onCollected=()=>{},resume=false}={}) {
+  analysisProfile=validateProfile(analysisProfile);
   dir=path.resolve(dir);fs.mkdirSync(dir,{recursive:true});
   if(!Number.isSafeInteger(concurrency)||concurrency<1||concurrency>3)throw Error('BATCH_CONCURRENCY_INVALID');
   const groups=groupProducts(seeds),stateFile=path.join(dir,'batch-state.json'),stop=()=>fs.existsSync(path.join(dir,'STOP'));
+  if(fs.existsSync(stateFile)&&validateProfile(JSON.parse(fs.readFileSync(stateFile,'utf8')).analysisProfile)!==analysisProfile)throw Error('BATCH_ANALYSIS_PROFILE_CHANGED');
   const lock=path.join(dir,'batch.lock');
   if(fs.existsSync(lock)){const pid=Number(fs.readFileSync(lock,'utf8'));let alive=false;try{process.kill(pid,0);alive=true;}catch{}if(alive)throw Error('BATCH_ALREADY_RUNNING');fs.unlinkSync(lock);}
   fs.writeFileSync(lock,String(process.pid),{flag:'wx'});
   const stopTimer=setInterval(()=>{if(!stop())return;const base=path.join(dir,'judgments');if(fs.existsSync(base))for(const id of fs.readdirSync(base).filter(n=>/^\d+$/.test(n)))fs.writeFileSync(path.join(base,id,'STOP'),'batch stop');},1000);
-  const state={version:'cream-product-batch-v1',mode,status:'collecting',productCount:groups.length,collected:0,judged:0,results:[],startedAt:new Date().toISOString()};
+  const state={version:'cream-product-batch-v1',mode,analysisProfile,status:'collecting',productCount:groups.length,collected:0,judged:0,results:[],startedAt:new Date().toISOString()};
   const emit=e=>{onEvent(e);};
   try {
     write(stateFile,state);
@@ -69,8 +72,8 @@ export async function runBatch({seeds,dir,concurrency=2,collect,collectDiscovere
           else {
             emit({type:'product_judgment_started',productId:packet.productId,packetId:packet.id});
             const result=await analyze({dir:productDir,packet,resume:Boolean(saved?.ownerThreadId),
-              mission:{objective:'이미 취합한 이 상품의 정보 묶음을 읽고 수익성·쿠폰·마일리지·수요·리스크를 종합하여 채택/보류/제외를 직접 판단한다. 구매처 미지원이나 매칭 미확인은 수익 없음이 아니라 자료 부족으로 보류한다.',product:packet.offers[0]||{kreamId:packet.productId},candidate:packet.candidate||null,offers:packet.offers,packetId:packet.id},
-              message:'먼저 team_state와 read_observation으로 수집된 상품 정보를 읽어라. 현재 근거로 계산 가능한 값과 미확인을 구분한다. 추가 정보가 결론을 바꿀 가능성이 있을 때만 보완 조사하라. 숫자 계산은 도구에 맡기고 판단은 직접 하라. 독립 검증 후 publish_assessment로 결과를 기록한다.',
+              mission:{analysisProfile,objective:'이미 취합한 이 상품의 정보 묶음을 읽고 수익성·쿠폰·마일리지·수요·리스크를 종합하여 채택/보류/제외를 직접 판단한다. 구매처 미지원이나 매칭 미확인은 수익 없음이 아니라 자료 부족으로 보류한다.',product:packet.offers[0]||{kreamId:packet.productId},candidate:packet.candidate||null,offers:packet.offers,packetId:packet.id},
+              message:analysisProfile===MUSINSA_PROFILE?MUSINSA_MESSAGE:'먼저 team_state와 read_observation으로 수집된 상품 정보를 읽어라. 현재 근거로 계산 가능한 값과 미확인을 구분한다. 추가 정보가 결론을 바꿀 가능성이 있을 때만 보완 조사하라. 숫자 계산은 도구에 맡기고 판단은 직접 하라. 독립 검증 후 publish_assessment로 결과를 기록한다.',
               onEvent:e=>emit({...e,productId:packet.productId})});
             row={productId:packet.productId,status:result.status,assessment:result.assessment};
           }
@@ -90,6 +93,6 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1]
   const arg=k=>process.argv.find(x=>x.startsWith(`--${k}=`))?.slice(k.length+3);
   if(!arg('seeds')||!arg('out'))throw Error('Use --seeds=<products.json> --out=<run-dir> [--resume]');
   const input=JSON.parse(fs.readFileSync(arg('seeds'),'utf8'));
-  try{const result=await runBatch({seeds:Array.isArray(input)?input:input.products,dir:arg('out'),concurrency:Number(arg('concurrency')||2),resume:process.argv.includes('--resume'),onEvent:e=>console.log(JSON.stringify(e))});console.log(JSON.stringify({status:result.status,productCount:result.productCount,judged:result.judged}));if(result.status!=='complete')process.exitCode=2;}
+  try{const result=await runBatch({seeds:Array.isArray(input)?input:input.products,dir:arg('out'),concurrency:Number(arg('concurrency')||2),resume:process.argv.includes('--resume'),analysisProfile:arg('analysis-profile')||'general',onEvent:e=>console.log(JSON.stringify(e))});console.log(JSON.stringify({status:result.status,productCount:result.productCount,judged:result.judged}));if(result.status!=='complete')process.exitCode=2;}
   catch(e){console.error(e.message);process.exitCode=1;}
 }

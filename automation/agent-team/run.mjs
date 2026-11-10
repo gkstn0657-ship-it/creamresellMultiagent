@@ -1,3 +1,5 @@
+import {analysisProfile,MUSINSA_PROFILE,MUSINSA_OWNER,MUSINSA_REVIEWER} from './analysis-profiles.mjs';
+import {saveMusinsaSignals} from './musinsa-signals.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
@@ -30,6 +32,10 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
     if(!packet.observations.some(o=>o.kind==='collection_summary'))store.observe('collection_summary',{productId:packet.productId,offers:packet.offers,sourceQuotes:packet.sourceQuotes||[],gaps:packet.gaps,collectionStatus:packet.collectionStatus},{mode:packet.observations[0].mode,observedAt:packet.collectedAt});
     store.save();
   }
+  const focused=analysisProfile(store.data.mission?.analysisProfile)===MUSINSA_PROFILE;
+  if(focused)saveMusinsaSignals(store);
+  const ownerInstructions=focused?MUSINSA_OWNER:OWNER,reviewInstructions=focused?MUSINSA_REVIEWER:REVIEWER;
+  const selectedOwnerTools=focused?ownerTools.filter(t=>!['collect_no1','investigate'].includes(t.name)):ownerTools;
   const active=new Map();let stopped=false,controlTimer,controlBusy=false,evidenceServer,reviewsThisTurn=0;
   const emit=(type,data={})=>{store.event(type,data);onEvent({type,...data});};
   const server=serverFactory({cwd:dir,onTool:async p=>{
@@ -57,7 +63,7 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
       if(reviewsThisTurn++>=3)throw Error('REVIEW_BUDGET_REACHED');
       const before=store.basis();
       const selected=proposal.decision==='adopt'||needsDeepReview||store.data.reviews.at(-1)?.verdict==='rework'?MODELS.deepReviewer:MODELS.reviewer;
-      const response=await server.startThread({instructions:REVIEWER,tools:reviewTools,...selected,config:{'agents.enabled':false,'mcp_servers.cream_evidence.enabled':false}});
+      const response=await server.startThread({instructions:reviewInstructions,tools:reviewTools,...selected,config:{'agents.enabled':false,'mcp_servers.cream_evidence.enabled':false}});
       const threadId=response.thread.id;actor(threadId,'reviewer');
       const ids=[...store.data.observations,...store.data.calculations].filter(x=>x.active!==false).map(x=>x.id);
       Object.assign(actors.find(x=>x.threadId===threadId),{model:selected.model,proposalHash:proposalHash(proposal),reviewBasis:before,requiredReads:ids});store.save();
@@ -73,10 +79,10 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
       'mcp_servers.cream_evidence.enabled':true});
     await server.start();
     let threadId=store.data.ownerThreadId;
-    const toolsHash=digest(ownerTools);
+    const toolsHash=digest(selectedOwnerTools);
     let resumed=false;
     if(resume&&threadId&&store.data.toolSchemaHash===toolsHash){
-      try{await server.call('thread/resume',{threadId,cwd:dir,developerInstructions:OWNER,model:MODELS.owner.model,sandbox:'read-only',approvalPolicy:'never',config:{'model_reasoning_effort':MODELS.owner.effort}});resumed=true;}
+      try{await server.call('thread/resume',{threadId,cwd:dir,developerInstructions:ownerInstructions,model:MODELS.owner.model,sandbox:'read-only',approvalPolicy:'never',config:{'model_reasoning_effort':MODELS.owner.effort,...(focused?{'agents.enabled':false,'mcp_servers.cream_evidence.enabled':false}:{})}});resumed=true;}
       catch(e){
         // A crash between thread creation and its first persisted turn can leave a thread ID without a rollout.
         // Recover only this explicit missing-thread condition; authentication/transport errors still fail.
@@ -87,7 +93,7 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
     if(!resumed) {
       if(threadId&&!resume)throw Error('EXISTING_TEAM_REQUIRES_RESUME');
       if(threadId)emit('owner_schema_migration',{previousThreadId:threadId});
-      const response=await server.startThread({instructions:OWNER,tools:ownerTools,...MODELS.owner});threadId=response.thread.id;
+      const response=await server.startThread({instructions:ownerInstructions,tools:selectedOwnerTools,...MODELS.owner,...(focused?{config:{'agents.enabled':false,'mcp_servers.cream_evidence.enabled':false}}:{})});threadId=response.thread.id;
       store.data.ownerThreadId=threadId;store.data.toolSchemaHash=toolsHash;actor(threadId,'owner');
       Object.assign(actors.find(x=>x.threadId===threadId),{requestedModel:MODELS.owner.model,effectiveModel:response.model||null,effort:MODELS.owner.effort});store.save();
     }

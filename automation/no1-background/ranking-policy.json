@@ -5,5 +5,8 @@
   "order": "rank-ascending",
   "preserveFilters": ["category", "period", "gender", "ageBand"],
   "stateNamespace": "musinsa-ranking",
+  "assessmentProfile": "musinsa-ranking",
+  "assessmentTool": "cream_musinsa_batch_start",
+  "primaryCriteria": ["margin-rate", "option-stock", "recent-sales-trend"],
   "discoveryAI": false
 }

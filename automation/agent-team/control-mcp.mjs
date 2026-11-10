@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import readline from 'node:readline';
 import {spawn} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
+import {analysisProfile,MUSINSA_PROFILE} from './analysis-profiles.mjs';
 import {groupProducts} from './packets.mjs';
 import {panelData} from './panel-data.mjs';
 import {workPolicy,workOrders,scopeStatus,startWork,reserveWork,stopWork,reopenWork,withWorkLock,explorationState} from './work-orders.mjs';
@@ -25,6 +26,7 @@ export const controlTools=[
   {name:'cream_explore_start',description:'Start deterministic full-catalog exploration for an existing user-confirmed work order. Continues the saved popularity-feed cursor and category rotation across separate user requests; no discovery AI. The PC automatically runs all remaining batches within N (5 per batch, 2 product AI agents). Do not supply handpicked seeds or launch another batch from completion events while this runner manages the work. Retry with the same workId. Set resume=true only for an explicit continuation of interrupted work.',inputSchema:object({workId,resume:{type:'boolean'}},['workId'])},
   {name:'cream_discovery_status',description:'Read persistent discovery cursor, category queues, coverage limitations and work progress. No collection or AI calls.',inputSchema:object({},[])},
   {name:'cream_batch_start',description:'Collect up to 5 product packets, then separate Codex agents judge them, within a user-confirmed work order. No daily 100 cap. Read cream_batch_status first. For an event-triggered follow-up pass triggerEventId; the server enforces one follow-up per event and the work product limit. No purchases or desktop UI.',inputSchema:object({products:{type:'array',items:product,minItems:1,maxItems:5},concurrency:{type:'integer',minimum:1,maximum:2},workId,triggerEventId:eventId,requestId:{type:'string',minLength:1,maxLength:160}},['products'])},
+  {name:'cream_musinsa_batch_start',description:'Analyze matched Musinsa ranking candidates using margin rate, option stock and recent sales trends. Deterministic ranking selection, focused product AI and independent review; no broad research. Requires an existing user-confirmed N work order and exact source options. Read batch status first. Does not perform KREAM matching or start general discovery.',inputSchema:object({products:{type:'array',items:product,minItems:1,maxItems:5},concurrency:{type:'integer',minimum:1,maximum:2},workId,requestId:{type:'string',minLength:1,maxLength:160}},['products'])},
   {name:'cream_batch_status',description:'Read collection/AI progress and per-product decisions. Without runId returns recent runs, user-confirmed work limit, reserved/remaining counts and active batches. Pass eventId to check whether its follow-up already started. No active work means wait for the next user request and ask its product count.',inputSchema:object({runId,eventId},[])},
   {name:'cream_batch_steer',description:'Send a follow-up instruction to active product agents. Use a productId to target one product. Queued delivery is not proof of execution.',inputSchema:object({runId,productId:str,message:str},['runId','message'])},
   {name:'cream_batch_stop',description:'Stop new collection and request interruption of active product judgments; state is retained.',inputSchema:object({runId})},
@@ -38,7 +40,8 @@ async function launch(dir,resume=false) {
   const stateFile=path.join(dir,'process.json');
   if(fs.existsSync(stateFile)){const old=JSON.parse(fs.readFileSync(stateFile,'utf8'));try{process.kill(old.pid,0);throw Error('BATCH_ALREADY_RUNNING');}catch(e){if(e.message==='BATCH_ALREADY_RUNNING')throw e;}}
   const output=fs.openSync(path.join(dir,'runtime.log'),'a');
-  const args=[BATCH,`--seeds=${path.join(dir,'products.json')}`,`--out=${dir}`,`--concurrency=${JSON.parse(fs.readFileSync(path.join(dir,'launch.json'),'utf8')).concurrency}`];
+  const launchInfo=JSON.parse(fs.readFileSync(path.join(dir,'launch.json'),'utf8'));
+  const args=[BATCH,`--analysis-profile=${analysisProfile(launchInfo.analysisProfile)}`,`--seeds=${path.join(dir,'products.json')}`,`--out=${dir}`,`--concurrency=${JSON.parse(fs.readFileSync(path.join(dir,'launch.json'),'utf8')).concurrency}`];
   if(resume)args.push('--resume');
   const child=spawn(process.execPath,args,{cwd:fileURLToPath(new URL('../../',import.meta.url)),windowsHide:true,detached:true,stdio:['ignore',output,output]});
   try{await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});}finally{fs.closeSync(output);}
@@ -54,6 +57,8 @@ export async function control(name,args={},options={}) {
   if(name==='cream_work_stop')return withWorkLock(root,()=>stopWork(root,args.workId));
   if(name==='cream_explore_start')return startExploration(root,args,options);
   if(name==='cream_discovery_status')return {discovery:discoveryStatus(root),work:scopeStatus(root)};
+  const profile=name==='cream_musinsa_batch_start'?MUSINSA_PROFILE:'general';
+  if(name==='cream_musinsa_batch_start')name='cream_batch_start';
   if(name==='cream_batch_start'){
     return withWorkLock(root,async()=>{
     if(workOrders(root).some(w=>{const e=explorationState(root,w.id);return w.status!=='stopped'&&e&&(e.workerAlive||e.status!=='complete');}))throw Error('EXPLORATION_MANAGES_BATCHES: read status; resume the same exploration instead of launching a separate batch');
@@ -67,6 +72,8 @@ export async function control(name,args={},options={}) {
     const id=`batch-${hash?hash.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5'):crypto.randomUUID()}`,dir=runDirectory(id,root);
     if(fs.existsSync(dir)){
       if(!key)throw Error('BATCH_ID_CONFLICT');
+      const savedLaunch=JSON.parse(fs.readFileSync(path.join(dir,'launch.json'),'utf8'));
+      if(analysisProfile(savedLaunch.analysisProfile)!==profile)throw Error('REQUEST_ID_PROFILE_CONFLICT');
       const file=path.join(dir,'products.json');
       if(!fs.existsSync(file))return {runId:id,launched:false,reused:true,status:'start_not_confirmed'};
       if(JSON.stringify(groupProducts(JSON.parse(fs.readFileSync(file,'utf8'))))!==JSON.stringify(groups))throw Error('REQUEST_ID_SCOPE_CONFLICT');
@@ -74,7 +81,7 @@ export async function control(name,args={},options={}) {
     }
     const assignedWork=reserveWork(root,{workId:args.workId,runId:id,productCount:groups.length,triggerEventId:args.triggerEventId,requestId:key,scopeHash:crypto.createHash('sha256').update(JSON.stringify(groups)).digest('hex')});
     fs.mkdirSync(dir);
-    fs.writeFileSync(path.join(dir,'products.json'),JSON.stringify(args.products,null,2));fs.writeFileSync(path.join(dir,'launch.json'),JSON.stringify({concurrency,workId:assignedWork,requestId:key||null,triggerEventId:args.triggerEventId||null,createdAt:new Date().toISOString()}));
+    fs.writeFileSync(path.join(dir,'products.json'),JSON.stringify(args.products,null,2));fs.writeFileSync(path.join(dir,'launch.json'),JSON.stringify({concurrency,analysisProfile:profile,workId:assignedWork,requestId:key||null,triggerEventId:args.triggerEventId||null,createdAt:new Date().toISOString()}));
     return {runId:id,workId:assignedWork,productCount:groups.length,...await (options.launch||launch)(dir)};
     });
   }

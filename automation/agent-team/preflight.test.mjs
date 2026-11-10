@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {CONNECTOR_VERSION} from '../no1-background/chrome-extension/protocol.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -9,7 +10,7 @@ import {preflight,inspectDotConfig} from './preflight.mjs';
 const temp=t=>{const p=fs.mkdtempSync(path.join(os.tmpdir(),'cream-preflight-'));t.after(()=>fs.rmSync(p,{recursive:true,force:true}));return p;};
 const codex=()=>({installed:true,authenticated:true});
 const dot=()=>({configured:false});
-const goodClient={status:async()=>({browserConnected:true,connectorVersion:'0.6.0'}),request:async cmd=>cmd==='settings:get'?{kreamApiBrowser:'electron'}:cmd==='platform:status'?{sessions:[{status:'active'}]}:{isLoggedIn:true}};
+const goodClient={status:async()=>({browserConnected:true,connectorVersion:CONNECTOR_VERSION}),request:async cmd=>cmd==='settings:get'?{kreamApiBrowser:'electron'}:cmd==='platform:status'?{sessions:[{status:'active'}]}:{isLoggedIn:true}};
 test('fresh clone preflight never creates a DB, work order, or product request',async t=>{
  const root=temp(t),calls=[];const r=await preflight({root,codex,dot,client:{...goodClient,request:async cmd=>{calls.push(cmd);return goodClient.request(cmd);}}});
  assert.equal(r.localReady,true);assert.equal(r.dotReady,false);assert.equal(r.liveProductWorkflowVerified,false);

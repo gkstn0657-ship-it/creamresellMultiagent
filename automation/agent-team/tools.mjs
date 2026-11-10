@@ -1,3 +1,5 @@
+import {readSavedMusinsaSignals} from './musinsa-signals.mjs';
+import {MUSINSA_PROFILE} from './analysis-profiles.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import {BackgroundClient} from '../no1-background/client.mjs';
@@ -11,6 +13,7 @@ const str={type:'string'}, arr={type:'array',items:str}, num={type:['number','nu
 const proposalSchema=schema({decision:{type:'string',enum:['adopt','hold','exclude']},reason:str,basis:arr,unresolved:arr});
 const def=(name,description,inputSchema)=>({type:'function',name,description,inputSchema});
 export const TOOL_DEFINITIONS=[
+  def('read_musinsa_signals','Read the three Musinsa screening signals: per-option margin rate, source stock and recent recorded sales count/median-price trends. Includes source observation IDs and incomplete coverage flags. No network or AI judgment.',schema({})),
   def('team_state','Read the mission, saved observations, calculations, reviews and progress.',schema({})),
   def('read_market_schema','Read the No1 price-table schema: per-size original 30-day volume, fast/normal/instant prices, displayed margins when available, actual fee settings and exact as-of timestamp. Distinguish upstream estimates, actual records, displayed margins and formula results. No network/UI.',schema({desiredSellingPrice:{type:'integer',minimum:0}},[])),
   def('read_margin_report','Read per-option No1-compatible margin amount, return rate and profit/loss/break-even/unknown for fast, normal, instant and desired selling prices. Uses collected evidence only, no network/UI. Default fees are explicit No1 defaults, not user settings. Desired price is hypothetical; missing prices stay unknown.',schema({desiredSellingPrice:num,taxMode:{type:'boolean'},fees:schema({kreamPercent:{type:'number',minimum:0,maximum:100},kreamInspectionFee:{type:'integer',minimum:0},poizonPercent:{type:'number',minimum:0,maximum:100},poizonMinFee:{type:'integer',minimum:0},poizonMaxFee:{type:'integer',minimum:0}},[])},[])),
@@ -22,7 +25,7 @@ export const TOOL_DEFINITIONS=[
   def('record_review','Independent reviewer only. Record source verification and inconsistencies; pass is not a profitability or purchase approval.',schema({verdict:{type:'string',enum:['pass','rework']},issues:arr,basis:arr})),
   def('publish_assessment','Product owner only. Persist AI adoption/hold/exclude judgment with a current independent review. Unknown facts remain visible; never purchases.',schema({decision:{type:'string',enum:['adopt','hold','exclude']},reason:str,basis:arr,unresolved:arr,reviewId:str})),
 ];
-export const reviewTools=TOOL_DEFINITIONS.filter(x=>['team_state','read_market_schema','read_margin_report','read_observation','record_review'].includes(x.name));
+export const reviewTools=TOOL_DEFINITIONS.filter(x=>['team_state','read_musinsa_signals','read_market_schema','read_margin_report','read_observation','record_review'].includes(x.name));
 export const ownerTools=TOOL_DEFINITIONS.filter(x=>x.name!=='record_review');
 
 export class TeamTools {
@@ -41,7 +44,16 @@ export class TeamTools {
     this.store.data.toolCalls++;this.store.event('tool_call',{tool,threadId});
     const reviewer=this.store.data.actors.some(x=>x.threadId===threadId&&x.role==='reviewer');
     if(reviewer&&!reviewTools.some(x=>x.name===tool))throw Error('REVIEWER_READ_ONLY');
-    if(tool==='team_state')return {...this.store.summary(),evidenceGaps:evidenceGaps(this.store)};
+    if(this.store.data.mission?.analysisProfile===MUSINSA_PROFILE&&['collect_no1','investigate'].includes(tool))throw Error('MUSINSA_SCREENING_PACKET_ONLY');
+    if(tool==='read_musinsa_signals')return readSavedMusinsaSignals(this.store);
+    if(tool==='team_state'){
+      const summary=this.store.summary();
+      if(this.store.data.mission?.analysisProfile===MUSINSA_PROFILE){
+        delete summary.margins;delete summary.marketSchemas;
+        summary.primarySignals=readSavedMusinsaSignals(this.store);
+      }
+      return {...summary,evidenceGaps:evidenceGaps(this.store)};
+    }
     if(tool==='read_margin_report')return marginReport(this.store.data.observations,args);
     if(tool==='read_market_schema')return marketSchemas(this.store.data.observations,args);
     if(tool==='read_observation'){
