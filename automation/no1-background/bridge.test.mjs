@@ -5,6 +5,13 @@ import {createBridge} from './bridge.mjs';
 import {BackgroundClient} from './client.mjs';
 import {dispatchBackground} from './mcp.mjs';
 const key = 'a'.repeat(64);
+test('pipeline capability follows connector connectivity, not authentication proof',async t=>{
+ const {bridge,send}=await fixture(t);assert.equal(bridge.status().pipelineProductQueriesEnabled,false);
+ await send('/next',null,{'X-No1-Connector-Version':'0.5.0'});
+ assert.equal(bridge.status().pipelineProductQueriesEnabled,true);
+ assert.equal(bridge.status().authentication,'check-platform-status-separately');
+ await send('/disconnect',{});assert.equal(bridge.status().pipelineProductQueriesEnabled,false);
+});
 async function fixture(t, options = {}) {
   const bridge = createBridge({key, requestTimeoutMs: 200, ...options});
   await new Promise(resolve => bridge.server.listen(0, '127.0.0.1', resolve));

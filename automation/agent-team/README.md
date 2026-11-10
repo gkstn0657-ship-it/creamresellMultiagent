@@ -1,5 +1,11 @@
 # Cream 상품별 Codex 에이전트 팀
 
+새 PC 연결·인증·기존 작업/DB를 변경 없이 검사하려면
+`node automation/agent-team/preflight.mjs`를 실행한다. `localReady`는 로컬 전제만
+뜻하며 실상품 전체 흐름 검증은 별도다. `dotPrerequisitesReady`는 설정 파일의 준비
+여부이고 `dotReady: null`은 원격 왕복 미검증이다. 새 상품 작업이나 DB를 만들지 않는다.
+현재 개발 작업 상태는 [작업 현황](../../docs/WORK-STATUS-20261110.md)에 기록한다.
+
 ## Dot 안의 관리 화면 (2026-11-10)
 
 사용자 요청에 따라 별도 로컬 대시보드 대신 **Dot/ChatGPT 대화 내부 MCP App**을 구현했다.

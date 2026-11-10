@@ -6,7 +6,8 @@ export function createBridge({key, requestTimeoutMs = 55000, now = Date.now} = {
   if (typeof key !== 'string' || !/^[a-f0-9]{64}$/.test(key)) throw Error('NO1_INVALID_BRIDGE_CONFIG');
   let active = null; let lastPollAt = 0; let connectorVersion = null; let waiter=null; const timings=[];
   const equal = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value) && crypto.timingSafeEqual(Buffer.from(value), Buffer.from(key));
-  const status = () => ({transport: 'chrome-official-relay', browserConnected: lastPollAt > 0 && (now() - lastPollAt < 40000 || Boolean(active?.delivered&&now()<active.deadline)), connectorVersion, requestPending: Boolean(active), commands: [...COMMANDS], productProbeAvailable: connectorVersion === CONNECTOR_VERSION, pipelineProductQueriesEnabled: false, uiFallbackEnabled: false,dispatch:'long-poll',recentTimings:timings.slice(-30)});
+  const connected = () => lastPollAt > 0 && (now() - lastPollAt < 40000 || Boolean(active?.delivered&&now()<active.deadline));
+  const status = () => ({transport: 'chrome-official-relay', browserConnected: connected(), connectorVersion, requestPending: Boolean(active), commands: [...COMMANDS], productProbeAvailable: connectorVersion === CONNECTOR_VERSION, pipelineProductQueriesEnabled: connected() && connectorVersion === CONNECTOR_VERSION, authentication: 'check-platform-status-separately', uiFallbackEnabled: false,dispatch:'long-poll',recentTimings:timings.slice(-30)});
   const deliver=()=>{if(!waiter||!active||active.delivered)return;const w=waiter;waiter=null;clearTimeout(w.timer);active.delivered=true;active.deliveredAt=now();w.send(200,{job:{id:active.id,cmd:active.cmd,payload:active.payload,deadline:active.deadline}});};
   const releaseWaiter=()=>{if(waiter){const w=waiter;waiter=null;clearTimeout(w.timer);w.send(200,{job:null});}};
   const settle = (value) => {
