@@ -1,0 +1,28 @@
+{
+  "offers": {
+    "agent-offers.json의 실제 제안ID": {
+      "S": {
+        "size": "S",
+        "optionEvidence": {"source": "dump-N123-실제URL해시-prod.json", "field": "text", "quote": "옵션 S / 판매가 120,000원"},
+        "unitPrice": {"value": 120000, "evidence": {"source": "dump-N123-실제URL해시-prod.json", "field": "text", "quote": "옵션 S / 판매가 120,000원"}},
+        "shipping": {"value": 0, "evidence": {"source": "dump-N123-실제URL해시-prod.json", "field": "text", "quote": "배송비 무료"}},
+        "conditionsConfirmed": false,
+        "conditionsEvidence": {"source": "dump-N123-실제URL해시-prod.json", "field": "text", "quote": "실제로 확인한 할인 적용 조건 원문"}
+      }
+    }
+  },
+  "sellers": {
+    "agent-offers.json의 실제 제안ID": {
+      "name": "실제 판매자명",
+      "businessNumber": "000-00-00000",
+      "role": "marketplace",
+      "domestic": true,
+      "identityEvidence": {"source": "dump-N123-실제URL해시-prod.json", "field": "text", "quote": "실제 판매자명이 포함된 원문"},
+      "businessEvidence": {"source": "dump-N123-실제URL해시-prod.json", "field": "text", "quote": "사업자등록번호 000-00-00000"},
+      "roleEvidence": {"source": "dump-N123-실제URL해시-prod.json", "field": "text", "quote": "플랫폼과 실제 판매자를 구분한 원문"},
+      "dispatchEvidence": {"source": "dump-N123-실제URL해시-prod.json", "field": "text", "quote": "국내 출고"},
+      "returnEvidence": {"source": "dump-N123-실제URL해시-prod.json", "field": "text", "quote": "반품 조건 원문"},
+      "receiptEvidence": {"source": "dump-N123-실제URL해시-prod.json", "field": "text", "quote": "구매 영수증 발급 가능"}
+    }
+  }
+}

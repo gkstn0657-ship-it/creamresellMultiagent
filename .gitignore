@@ -16,7 +16,14 @@ process.json
 kream-runs/
 outputs/
 runs/
-renew/
+# Legacy modules are still imported by the current tools. Keep their source,
+# while excluding historical runs and implementation backups.
+/renew/*
+!/renew/Cream/
+/renew/Cream/*
+!/renew/Cream/kream-tools/
+!/renew/Cream/naver-extension/
+!/renew/Cream/README-kream.md
 *.xlsx
 *.zip
 *.tar.gz

@@ -1,0 +1,12 @@
+{
+  "freshnessMinutes": 10,
+  "sellerTtlHours": 24,
+  "maxFallback": 3,
+  "maxLlmCalls": 5,
+  "maxLlmInputChars": 20000,
+  "feeRate": 0.05,
+  "outboundShipping": 3000,
+  "costPolicyConfirmed": false,
+  "costPolicySource": "운영자가 실제 적용 비용을 확인한 출처 입력",
+  "costPolicyVersion": "실제 적용 버전 입력"
+}
