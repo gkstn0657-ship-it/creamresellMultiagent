@@ -42,3 +42,16 @@ test('no source means no deep trade collection and explicit failure evidence, ne
  assert.equal(calls.some(x=>x.includes('trades')),false);assert.ok(p.observations.some(x=>x.kind==='source_search_error'));
  assert.ok(p.gaps.includes('deepMarketCollectionDeferredUntilSourceFound'));assert.equal(p.collectionStatus,'partial');
 });
+
+test('matched discovery offers name the actual feed provenance rather than an official-page lookup',async()=>{
+ const packet=await collectCandidate(candidate(),{mode:'fixture',search:async()=>({items:[{productUrl:'https://www.musinsa.com/products/123'}],hasNext:false}),
+ client:{request:async cmd=>{
+  if(cmd.endsWith('prices'))return {prices:[{size:'L',option:'L'}]};
+  if(cmd.endsWith('details'))return {colorway:'BLACK'};
+  if(cmd==='stock:check')return {makerNumber:'MODEL-1',productNumber:'123',combinedOptions:[{firstOption:'BLACK',size:'L',limitedQty:1}]};
+  return {productId:'123',styleNo:'MODEL-1'};
+ }},collect:async request=>({request,identity:{marketBinding:'old official-page claim'},missingFields:[],observedAt:new Date().toISOString()})});
+ const payload=packet.observations.find(x=>x.kind==='no1_product').payload;
+ assert.equal(packet.offers.length,1);assert.equal(payload.marketIdentityEvidence.source,'no1-kream-popularity-response');
+ assert.match(payload.identity.marketBinding,/not separate official-page verification/);
+});

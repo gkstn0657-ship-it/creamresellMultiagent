@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-10",
+  "timezone": "Asia/Seoul",
+  "automatedChecks": {"scope": "automation/agent-team and automation/no1-background root test files", "passed": 138, "failed": 0},
+  "authenticatedDevelopmentWorkflow": {
+    "productId": "574093",
+    "sourceRetailers": ["musinsa", "29cm"],
+    "matchedMusinsaOptions": 3,
+    "collectionMs": 23877,
+    "judgmentAndReviewMs": 160045,
+    "completedAt": "2026-11-10T05:44:34.502Z",
+    "ownerModel": "gpt-6.1-sol",
+    "reviewerModel": "gpt-6.1-sol",
+    "observationsRead": 11,
+    "calculationsReviewed": 6,
+    "review": "pass",
+    "decision": "exclude",
+    "readiness": "research_only",
+    "purchaseAuthorized": false,
+    "scope": "Isolated development validation, not a new production work order or concurrency benchmark"
+  },
+  "preservedProductionContinuity": {
+    "databaseCheck": "ok",
+    "cursor": "2",
+    "observedProducts": 50,
+    "waitingProducts": 40,
+    "targetProducts": 10,
+    "judgedProducts": 10,
+    "remainingProducts": 0
+  },
+  "unverified": ["actual checkout eligibility and quantity benefits", "shipping and final settlement", "upstream refresh timestamps", "29CM option stock", "Dot UI rendering"]
+}

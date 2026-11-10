@@ -77,6 +77,7 @@ export async function collectCandidate(candidate,{client=new BackgroundClient(),
      // not a title similarity guess. Price/benefit conditions remain unconfirmed.
      payload.marketIdentityEvidence={source:'no1-kream-popularity-response',productId:candidate.kreamId,marketModel:candidate.model,sourceModel:stock.makerNumber,marketColor,sourceColor:sourceColor.value,sourceColorBasis:sourceColor.basis,sourceOptionLabel:option.firstOption,observedAt:candidate.discovery.observedAt};
      payload.identity.marketModelIndependentlyVerified=true;
+     payload.identity.marketBinding='KREAM popularity feed model and details color matched to merchant model and explicit color; not separate official-page verification';
      payload.missingFields=payload.missingFields.filter(x=>x!=='marketModelIndependentEvidence');
      observe('no1_product',payload,payload.observedAt);offers.push(seed);
     }catch(e){if(fatalCollectionError(e))throw e;gaps.add(e.message);observe('collection_error',{request:seed,code:e.message});}

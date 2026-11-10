@@ -55,10 +55,16 @@ test('unpaired browser and product queries fail before a job is delivered', asyn
   assert.equal((await (await send('/next')).json()).job, null);
 });
 test('expired request is removed; late results cannot satisfy another request', async t => {
-  const {send, client} = await fixture(t, {requestTimeoutMs: 20}); await send('/next');
+  // Allow the HTTP job to be delivered under concurrent test-runner load before
+  // testing expiry; a 20 ms deadline could expire before pendingJob sees it.
+  const {send, client} = await fixture(t, {requestTimeoutMs: 500}); await send('/next');
   const request = client.request('stock:supportedSites'); const rejection = assert.rejects(request, /NO1_BRIDGE_TIMEOUT/); const job = await pendingJob(send);
   await rejection;
   assert.equal((await send('/result', {id: job.id, ok: true, data: {sites: []}})).status, 409);
+  const next=client.request('stock:supportedSites');const nextJob=await pendingJob(send);
+  assert.notEqual(nextJob.id,job.id);
+  assert.equal((await send('/result',{id:job.id,ok:true,data:{sites:[]}})).status,409);
+  await send('/result',{id:nextJob.id,ok:true,data:{sites:[]}});assert.deepEqual(await next,{sites:[]});
 });
 test('only one active request; explicit disconnect settles it immediately', async t => {
   const {send, client} = await fixture(t); await send('/next');
