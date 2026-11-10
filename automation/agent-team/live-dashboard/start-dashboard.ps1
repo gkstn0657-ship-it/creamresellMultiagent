@@ -1,7 +1,7 @@
 param(
     [string]$Root,
     [string]$WorkId,
-    [int]$Port = 8874
+    [int]$Port = 8875
 )
 $ErrorActionPreference = 'Stop'
 $taskRepo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\..')).Path

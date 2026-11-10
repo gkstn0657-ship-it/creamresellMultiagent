@@ -2,6 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import {fileURLToPath,pathToFileURL} from 'node:url';
+import {BackgroundClient} from '../../no1-background/client.mjs';
+import {control} from '../control-mcp.mjs';
+import {classifyError} from '../error-catalog.mjs';
+import {reopenWork,withWorkLock} from '../work-orders.mjs';
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const defaultRoot=path.resolve(here,'../../../../Cream/kream-runs/agent-teams');
@@ -59,13 +63,45 @@ export function liveDashboardData(root=defaultRoot,workId){
   featured:recent.find(r=>r.qualified)||null,recent:recent.slice(0,8),events:recentEvents(path.join(dir,'continuous.log')),
  };
 }
-export function createDashboardServer({root=defaultRoot,workId,port=8874}={}){
+export async function startDashboardWork({root,workId,client=new BackgroundClient(),continueWork=control}={}){
+ if(!safeWorkId(workId))throw Error('INVALID_WORK_ID');
+ const workFile=path.join(root,'work-orders',workId+'.json'),work=read(workFile);
+ if(!work||work.scopeMode!=='profitable-results'||work.continuous!==true)throw Error('ACTIVE_MUSINSA_WORK_REQUIRED');
+ const dir=path.join(root,'explorations',workId);
+ if(work.status==='stopped')await withWorkLock(root,()=>{
+  reopenWork(root,workId);
+  for(const file of [path.join(dir,'STOP'),...work.entries.map(e=>path.join(root,e.runId,'STOP'))])if(fs.existsSync(file))fs.unlinkSync(file);
+  for(const entry of work.entries){const judgments=path.join(root,entry.runId,'judgments');if(!fs.existsSync(judgments))continue;
+   for(const name of fs.readdirSync(judgments).filter(n=>/^\d+$/.test(n))){const file=path.join(judgments,name,'STOP');if(fs.existsSync(file))fs.unlinkSync(file);}}
+ });
+ const result=await continueWork('cream_musinsa_work_continue',{workId},{root});
+ let bridge;try{bridge=await client.status();}catch{return {ok:false,code:503,reason:'NO1_BRIDGE_UNAVAILABLE',workerStarted:result.launched===true||result.reused===true};}
+ if(bridge.browserConnected!==true)return {ok:false,code:503,reason:'NO1_BRIDGE_DISCONNECTED',workerStarted:result.launched===true||result.reused===true};
+ if(bridge.connectorVersion!==bridge.requiredConnectorVersion)return {ok:false,code:426,reason:'NO1_CONNECTOR_UPDATE_REQUIRED',workerStarted:result.launched===true||result.reused===true};
+ const state=read(path.join(dir,'state.json'));
+ if(state?.status==='waiting_for_retry')fs.writeFileSync(path.join(dir,'WAKE'),'dashboard start');
+ return {ok:true,code:200,reason:state?.status==='waiting_for_retry'?'RETRY_WOKEN':'WORK_RUNNING',workerStarted:result.launched===true||result.reused===true};
+}
+export function createDashboardServer({root=defaultRoot,workId,port=8875,start=startDashboardWork}={}){
  const files=new Map([['/','index.html'],['/app.css','app.css'],['/app.js','app.js']]);
  const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8'};
+ let starting=null;
  const server=http.createServer((req,res)=>{
   const url=new URL(req.url,'http://127.0.0.1');
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
   res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'");
+  if(url.pathname==='/api/start'&&req.method==='POST'){
+   const origin=`http://127.0.0.1:${server.address()?.port||port}`;
+   if(req.headers.origin!==origin||!String(req.headers['content-type']||'').startsWith('application/json')){res.writeHead(403);res.end();return;}
+   let body='';req.on('data',part=>{body+=part;if(body.length>1024)req.destroy();});
+   req.on('end',async()=>{let requested;try{requested=JSON.parse(body).workId;}catch{res.writeHead(400);res.end();return;}
+    const selected=liveDashboardData(root,workId).workId;
+    if(!safeWorkId(requested)||requested!==selected){res.writeHead(400);res.end();return;}
+    try{if(!starting)starting=Promise.resolve(start({root,workId:requested})).finally(()=>{starting=null;});const result=await starting;
+     res.writeHead(result.ok?200:[426,503].includes(result.code)?result.code:409,{'Content-Type':'application/json'});res.end(JSON.stringify(result));
+    }catch(e){const classified=classifyError({reason:e.message});res.writeHead(classified.code===409?409:500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,code:classified.code,reason:classified.reason}));}
+   });return;
+  }
   if(req.method!=='GET'){res.writeHead(405);res.end();return;}
   if(url.pathname==='/health'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({app:'cream-musinsa-live-dashboard-v1'}));return;}
   if(url.pathname==='/api/state'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(liveDashboardData(root,workId)));return;}
@@ -76,7 +112,7 @@ export function createDashboardServer({root=defaultRoot,workId,port=8874}={}){
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href){
  const arg=n=>process.argv.find(v=>v.startsWith(`--${n}=`))?.slice(n.length+3);
- const root=arg('root')?path.resolve(arg('root')):defaultRoot,port=Number(arg('port')||8874);
+ const root=arg('root')?path.resolve(arg('root')):defaultRoot,port=Number(arg('port')||8875);
  if(!Number.isInteger(port)||port<1024||port>65535)throw Error('INVALID_DASHBOARD_PORT');
  const app=createDashboardServer({root,workId:arg('work'),port});await app.listen();console.log(JSON.stringify({app:'cream-musinsa-live-dashboard-v1',port,root}));
 }

@@ -16,7 +16,15 @@ const eventText=e=>{
  return e.type.replaceAll('_',' ');
 };
 const decisionText={adopt:'통과',hold:'보류',exclude:'제외',pending:'진행 중'};
-let snapshot=null;
+let snapshot=null,startBusy=false,startMessage='';
+function renderStart(data){
+ const button=el('start-button');if(!button)return;
+ const running=data.workerAlive&&['discovering','judging','recovering'].includes(data.status);
+ button.disabled=startBusy||!data.workId||running;
+ button.textContent=startBusy?'시작 요청 중':running?'탐색 진행 중':data.status==='waiting'?'지금 다시 시도':'탐색 시작';
+ const feedback=el('start-feedback');feedback.textContent=startMessage||(!data.workId?'시작할 작업이 없습니다.':running?'저장된 인기 순위에서 탐색 중입니다.':'저장된 작업을 이어서 실행합니다.');
+ feedback.classList.toggle('error',/연결|실패|오류/.test(startMessage));
+}
 function tickClock(){
  set('clock',new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date()));
  if(snapshot?.status!=='waiting'||!snapshot.retryAt){set('next-retry','');return;}
@@ -42,7 +50,7 @@ function renderEvents(data){
  for(const e of data.events){const warning=/retry|wait/.test(e.type),error=/attention|exhausted/.test(e.type);const row=node('div',`event-row ${error?'error':warning?'warning':''}`);row.append(node('span','event-dot'),node('span','',eventText(e)));list.append(row);}
 }
 function render(data){
- snapshot=data;const active=data.workerAlive&&['discovering','judging','recovering'].includes(data.status);
+ snapshot=data;renderStart(data);const active=data.workerAlive&&['discovering','judging','recovering'].includes(data.status);
  const waiting=data.status==='waiting',offline=data.status==='offline'||data.status==='stopped';
  el('connection').classList.toggle('offline',!data.workerAlive);
  el('connection').lastChild.textContent=data.workerAlive?'작업 기록 연결됨':'실행기 연결 끊김';
@@ -74,4 +82,14 @@ async function refresh(){
  try{const response=await fetch('/api/state',{cache:'no-store',signal:AbortSignal.timeout(6000)});if(!response.ok)throw Error('DATA_UNAVAILABLE');render(await response.json());}
  catch{el('connection').classList.add('offline');set('connection','● 대시보드 서버 연결 끊김');el('hero-panel').dataset.state='offline';set('activity-title','기록을 읽을 수 없어요');set('activity-detail','대시보드 서버 연결을 다시 시도합니다.');}
 }
+el('start-button').addEventListener('click',async()=>{
+ if(location.port==='8874'){location.assign('http://127.0.0.1:8875/');return;}
+ if(!snapshot?.workId||startBusy)return;
+ startBusy=true;startMessage='';renderStart(snapshot);
+ try{const response=await fetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workId:snapshot.workId}),signal:AbortSignal.timeout(15000)});
+  const result=await response.json();
+  startMessage=result.ok?'탐색 재개 요청을 보냈습니다.':result.reason==='NO1_BRIDGE_DISCONNECTED'?'No1 확장 연결 대기 중입니다. 연결되면 저장된 위치에서 재개합니다.':result.reason==='NO1_BRIDGE_UNAVAILABLE'?'No1 로컬 브리지 연결을 확인할 수 없습니다.':result.reason==='NO1_CONNECTOR_UPDATE_REQUIRED'?'No1 확장 버전 갱신이 필요합니다.':`시작 실패: ${result.reason||result.code||response.status}`;
+ }catch(e){startMessage=`시작 요청 실패: ${e.message}`;}
+ finally{startBusy=false;renderStart(snapshot);await refresh();}
+});
 tickClock();setInterval(tickClock,1000);refresh();setInterval(refresh,2000);
