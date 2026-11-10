@@ -1,5 +1,6 @@
 import {relayRequest, validateCommand, projectData, safeCode, PRODUCT_COMMANDS, CONNECTOR_VERSION} from './protocol.mjs';
 import {readDisplayedTable,readSavedMarginSettings} from './schema-data.mjs';
+import {readRankingSettings} from './ranking-data.mjs';
 const BASE = 'http://127.0.0.1:8871';
 let busy = false, nextPoll=null,connectionGeneration=0;
 
@@ -40,12 +41,13 @@ async function existingWebToken() {
 async function pageSchema(cmd,payload,tabIds){
   const values=[];
   for(const tabId of tabIds){
-    const frames=await chrome.scripting.executeScript({target:{tabId,allFrames:true},world:cmd==='market:kream:displayed-schema'?'MAIN':'ISOLATED',func:cmd==='market:kream:displayed-schema'?readDisplayedTable:readSavedMarginSettings,args:cmd==='market:kream:displayed-schema'?[payload.productCode]:[]});
+    const frames=await chrome.scripting.executeScript({target:{tabId,allFrames:true},world:['market:kream:displayed-schema','musinsa:ranking:settings'].includes(cmd)?'MAIN':'ISOLATED',func:cmd==='musinsa:ranking:settings'?readRankingSettings:cmd==='market:kream:displayed-schema'?readDisplayedTable:readSavedMarginSettings,args:cmd==='market:kream:displayed-schema'?[payload.productCode]:[]});
     for(const frame of frames)if(frame.result)values.push(...(Array.isArray(frame.result)?frame.result:[frame.result]));
   }
   const unique=new Map(values.map(v=>{const {observedAt,...stable}=v;return [JSON.stringify(stable),v];}));
   if(unique.size>1)throw Error('NO1_SCHEMA_AMBIGUOUS');
   const value=unique.values().next().value;
+  if(!value&&cmd==='musinsa:ranking:settings')throw Error('NO1_RANKING_SETTINGS_UNAVAILABLE');
   if(!value&&cmd==='market:margin-settings')throw Error('NO1_SCHEMA_NOT_AVAILABLE');
   return projectData(cmd,value||{available:false,reason:'MATCHING_PRICE_TABLE_NOT_OPEN'},payload);
 }
@@ -66,7 +68,7 @@ async function poll() {
       if (typeof job.id !== 'string' || !Number.isFinite(job.deadline) || job.deadline <= Date.now()) throw Error('NO1_BRIDGE_TIMEOUT');
       validateCommand(job.cmd, job.payload);
       const {token,tabIds} = await existingWebToken();
-      const pageOnly=['market:margin-settings','market:kream:displayed-schema'].includes(job.cmd);
+      const pageOnly=['market:margin-settings','market:kream:displayed-schema','musinsa:ranking:settings'].includes(job.cmd);
       if (!pageOnly&&PRODUCT_COMMANDS.includes(job.cmd)) {
         const settings = await relayRequest({cmd: 'settings:get', token});
         if (settings.kreamApiBrowser !== 'electron') throw Error('NO1_BACKGROUND_MODE_REQUIRED');

@@ -1,13 +1,16 @@
 import {projectHistory,projectMarginSettings,projectDisplayedSchema} from './schema-data.mjs';
+import {validRankingRequest,projectRankingSettings,projectRankingProducts} from './ranking-data.mjs';
 export const RELAY_URL = 'wss://relay.certi.life/ws/v2';
 export const CLIENT_VERSION = '1.35.8';
-export const CONNECTOR_VERSION = '0.6.0';
-export const PRODUCT_COMMANDS = Object.freeze(['mecro:inventory:search', 'stock:check', 'market:kream:prices', 'market:kream:details', 'market:kream:trades', 'market:kream:askPreviewBatch', 'market:kream:history:start', 'market:kream:displayed-schema', 'musinsa:product:benefit']);
+export const CONNECTOR_VERSION = '0.7.0';
+export const PRODUCT_COMMANDS = Object.freeze(['musinsa:ranking:settings','musinsa:ranking:products','mecro:inventory:search', 'stock:check', 'market:kream:prices', 'market:kream:details', 'market:kream:trades', 'market:kream:askPreviewBatch', 'market:kream:history:start', 'market:kream:displayed-schema', 'musinsa:product:benefit']);
 export const COMMANDS = Object.freeze(['stock:supportedSites', 'musinsa:ranking:check-login', 'settings:get', 'platform:status', 'market:margin-settings', ...PRODUCT_COMMANDS]);
 const errorCodes = new Set(['NO_ELECTRON_CONNECTED', 'ELECTRON_DISCONNECTED', 'ELECTRON_OFFLINE', 'ELECTRON_SEND_FAILED', 'RECONNECTING', 'CMD_NOT_FOUND', 'REMOTE_COMMAND_FORBIDDEN', 'MAINTENANCE', 'TIMEOUT', 'NO1_AUTH_REQUIRED', 'NO1_WEB_TAB_REQUIRED', 'NO1_MULTIPLE_WEB_SESSIONS', 'NO1_BROWSER_ACCESS_FAILED', 'NO1_RELAY_CONNECTION_FAILED', 'NO1_RELAY_CLOSED', 'NO1_RELAY_TIMEOUT', 'NO1_INVALID_RESPONSE', 'NO1_COMMAND_FORBIDDEN', 'NO1_INVALID_PAYLOAD', 'NO1_BRIDGE_TIMEOUT', 'NO1_BRIDGE_DISCONNECTED', 'NO1_BRIDGE_BUSY', 'NO1_CONNECTION_STOPPED', 'NO1_BRIDGE_NOT_CONFIGURED', 'NO1_BRIDGE_UNAVAILABLE', 'NO1_INVALID_BRIDGE_CONFIG', 'NO1_PRODUCT_QUERIES_UNVERIFIED']);
 
 export function safeCode(code) { return errorCodes.has(code) ? code : 'NO1_REMOTE_ERROR'; }
 for (const code of ['NO1_BACKGROUND_MODE_REQUIRED', 'NO1_PLATFORM_LOGIN_REQUIRED', 'NO1_IDENTITY_MISMATCH', 'NO1_OPTION_NOT_FOUND', 'NO1_CONNECTOR_UPDATE_REQUIRED', 'MUSINSA_LOGIN_REQUIRED', 'MUSINSA_BENEFIT_FETCH_FAILED', 'STOCK_CHECK_FAILED', 'KREAM_LOGIN_REQUIRED', 'KREAM_TOKEN_EXPIRED', 'NO1_UPSTREAM_LOOKUP_FAILED']) errorCodes.add(code);
+errorCodes.add('NO1_RANKING_SETTINGS_UNAVAILABLE');
+errorCodes.add('MUSINSA_RANKING_ERROR');
 const id = value => typeof value === 'string' && /^\d{1,12}$/.test(value);
 errorCodes.add('KREAM_SEARCH_FAILED');
 for(const code of ['NO1_SCHEMA_AMBIGUOUS','NO1_SCHEMA_NOT_AVAILABLE','NO1_HISTORY_TIMEOUT'])errorCodes.add(code);
@@ -16,7 +19,8 @@ export function validateCommand(cmd, payload) {
   if (!COMMANDS.includes(cmd)) throw Error('NO1_COMMAND_FORBIDDEN');
   if (!payload || Array.isArray(payload) || typeof payload !== 'object') throw Error('NO1_INVALID_PAYLOAD');
   let valid;
-  if (cmd === 'mecro:inventory:search') valid = keys(payload, ['keyword','cursor'], ['keyword','cursor']) && payload.keyword === ' ' && typeof payload.cursor === 'string' && /^\d{1,12}$/.test(payload.cursor);
+  if (cmd === 'musinsa:ranking:products') valid = validRankingRequest(payload);
+  else if (cmd === 'mecro:inventory:search') valid = keys(payload, ['keyword','cursor'], ['keyword','cursor']) && payload.keyword === ' ' && typeof payload.cursor === 'string' && /^\d{1,12}$/.test(payload.cursor);
   else if (cmd === 'stock:check') valid = keys(payload, ['url'], ['url']) && typeof payload.url === 'string' && /^https:\/\/www\.musinsa\.com\/products\/\d{1,12}$/.test(payload.url);
   else if (cmd === 'market:kream:prices') valid = keys(payload, ['productCode', 'size'], ['productCode']) && id(payload.productCode) && (payload.size === undefined || typeof payload.size === 'string' && payload.size.length > 0 && payload.size.length <= 64 && payload.size.trim() === payload.size && !/[\x00-\x1f]/.test(payload.size));
   else if (cmd === 'market:kream:details') valid = keys(payload, ['productCode', 'includeFastDelivery'], ['productCode', 'includeFastDelivery']) && id(payload.productCode) && typeof payload.includeFastDelivery === 'boolean';
@@ -41,6 +45,8 @@ function safeTree(value, depth = 0) {
 }
 export function projectData(cmd, data, payload = {}) {
   if (!data || typeof data !== 'object') throw Error('NO1_INVALID_RESPONSE');
+  if(cmd==='musinsa:ranking:settings')return projectRankingSettings(data);
+  if(cmd==='musinsa:ranking:products')return projectRankingProducts(data);
   if(cmd==='market:kream:history:start')return projectHistory(data,payload);
   if(cmd==='market:margin-settings')return projectMarginSettings(data);
   if(cmd==='market:kream:displayed-schema')return projectDisplayedSchema(data,payload);

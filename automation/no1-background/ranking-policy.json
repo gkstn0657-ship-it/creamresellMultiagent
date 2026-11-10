@@ -1,0 +1,9 @@
+{
+  "source": "no1-musinsa-ranking",
+  "categorySource": "current-no1-ranking-settings",
+  "section": "all",
+  "order": "rank-ascending",
+  "preserveFilters": ["category", "period", "gender", "ageBand"],
+  "stateNamespace": "musinsa-ranking",
+  "discoveryAI": false
+}

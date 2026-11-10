@@ -9,7 +9,7 @@ test('version mismatch reports only sanitized version and keeps product gate clo
  const {bridge,send}=await fixture(t);
  await send('/next',null,{'X-No1-Connector-Version':'0.5.0'});
  assert.equal(bridge.status().observedConnectorVersion,'0.5.0');
- assert.equal(bridge.status().requiredConnectorVersion,'0.6.0');
+ assert.equal(bridge.status().requiredConnectorVersion,'0.7.0');
  assert.equal(bridge.status().connectorVersion,null);
  assert.equal(bridge.status().pipelineProductQueriesEnabled,false);
  await send('/next',null,{'X-No1-Connector-Version':'private-value'});
@@ -17,7 +17,7 @@ test('version mismatch reports only sanitized version and keeps product gate clo
 });
 test('pipeline capability follows connector connectivity, not authentication proof',async t=>{
  const {bridge,send}=await fixture(t);assert.equal(bridge.status().pipelineProductQueriesEnabled,false);
- await send('/next',null,{'X-No1-Connector-Version':'0.6.0'});
+ await send('/next',null,{'X-No1-Connector-Version':'0.7.0'});
  assert.equal(bridge.status().pipelineProductQueriesEnabled,true);
  assert.equal(bridge.status().authentication,'check-platform-status-separately');
  await send('/disconnect',{});assert.equal(bridge.status().pipelineProductQueriesEnabled,false);

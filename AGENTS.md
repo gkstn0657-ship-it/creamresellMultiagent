@@ -8,3 +8,9 @@
 - During work, communicate concise progress in Korean and continue independently wherever the existing authorization permits.
 - The user values speed. Keep the active scope focused, front-load connection prerequisites, and bundle any unavoidable user setup steps. After relevant checks pass, do not broaden or repeat tests without a new change, failure, or concrete unresolved concern.
 - Product discovery uses a fixed deterministic plan, not a runtime AI exploration agent. Preserve the saved popularity-feed position, category rotation, and cross-request deduplication when the user repeatedly asks for N products. Keep the existing per-product profitability and independent-review AI roles. Dot starts and monitors the work; the PC loop executes the confirmed N scope. Do not silently restore AI-driven candidate selection.
+
+## Musinsa ranking source
+
+- Musinsa ranking requests use `automation/no1-background/ranking-policy.json` and `no1_background_ranking_feed` (CLI: `node automation/no1-background/read-ranking.mjs`). Read the current No1 Ranking Analysis category/period/gender/age settings; query section `all` and process numeric rank ascending. Do not substitute NEW, rising, keyword results or the general KREAM discovery feed.
+- Ranking feed previews do not advance the general discovery cursor or consume a work order. The existing `cream_explore_start` remains the general KREAM runner, not a Musinsa ranking runner. Keep ranking provenance and any future traversal state separate. Do not claim a ranking preview has run downstream profitability judgments.
+- If the No1 ranking settings cannot be read, report the explicit failure; never silently replace the selected category with all categories. No1 operations remain background-only.

@@ -1,3 +1,4 @@
+import {rankingFeedTool,readRankingFeed} from './ranking-feed.mjs';
 import {BackgroundClient} from './client.mjs';
 import {safeCode} from './chrome-extension/protocol.mjs';
 import {productProbeTool, probeProduct} from './product-probe.mjs';
@@ -19,11 +20,16 @@ export const backgroundTools = descriptors.map(([name, description]) => ({name, 
 backgroundTools.push(productProbeTool);
 backgroundTools.push(displayedSchemaTool);
 backgroundTools.push(referenceLookupTool);
-export function handlesBackgroundTool(name) { return name === referenceLookupTool.name || name === displayedSchemaTool.name || name === productProbeTool.name || descriptors.some(([candidate]) => candidate === name); }
+backgroundTools.push(rankingFeedTool);
+export function handlesBackgroundTool(name) { return name === rankingFeedTool.name || name === referenceLookupTool.name || name === displayedSchemaTool.name || name === productProbeTool.name || descriptors.some(([candidate]) => candidate === name); }
 export async function dispatchBackground(req, client = new BackgroundClient()) {
   const entry = descriptors.find(([name]) => name === req.params?.name);
   const answer = (text, isError = false) => ({jsonrpc: '2.0', id: req.id, result: {content: [{type: 'text', text: typeof text === 'string' ? text : JSON.stringify(text)}], isError}});
   if (req.id === undefined) return null;
+  if(req.params?.name===rankingFeedTool.name){
+    try{return answer(await readRankingFeed(client,req.params.arguments));}
+    catch(error){return answer(safeCode(error.message),true);}
+  }
   if(req.params?.name===referenceLookupTool.name){
     try{return answer(await lookupReference(req.params.arguments,{client}));}
     catch(error){return answer(safeCode(error.message),true);}
