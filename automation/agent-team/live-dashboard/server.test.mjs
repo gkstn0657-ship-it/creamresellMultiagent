@@ -36,6 +36,29 @@ test('ordinary exploration shows its requested product target',()=>{
  fs.mkdirSync(path.join(root,'work-orders'),{recursive:true});fs.writeFileSync(path.join(root,'work-orders',id+'.json'),JSON.stringify({id,status:'open',targetProducts:300,createdAt:'2026-11-11T00:00:00Z'}));
  assert.equal(liveDashboardData(root,id).initialTarget,300);
 });
+
+test('general dashboard retains earlier runs and includes current results after worker restart',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'cream-dashboard-resume-')),id='work-11111111-2222-3333-4444-555555555555';
+ const a='batch-11111111-2222-3333-4444-555555555555',b='batch-22222222-2222-3333-4444-555555555555',c='batch-33333333-2222-3333-4444-555555555555';
+ const dir=path.join(root,'explorations',id);
+ const save=(file,data)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify(data));};
+ save(path.join(root,'work-orders',id+'.json'),{id,status:'open',targetProducts:300,entries:[a,b,c].map(runId=>({runId,productCount:5}))});
+ save(path.join(dir,'process.json'),{pid:process.pid});
+ const row=(id,at)=>({productId:id,status:'complete',assessment:{decision:'hold',reviewId:'r-'+id,at}});
+ save(path.join(root,a,'batch-state.json'),{status:'complete',collected:5,results:[row('1','2026-11-11T01:00:00Z')]});
+ save(path.join(root,b,'batch-state.json'),{status:'judging',collected:5,productCount:5,judged:2,results:[row('2','2026-11-11T02:00:00Z'),{productId:'3',status:'needs_attention',assessment:{reviewId:'bad',decision:'adopt'}}]});
+ save(path.join(root,c,'batch-state.json'),{status:'prefetched',collected:5,results:[]});
+ save(path.join(dir,'state.json'),{status:'running_batch',batches:[{runId:a}],currentRunId:b});
+ fs.writeFileSync(path.join(dir,'runtime.log'),JSON.stringify({type:'product_judged',productId:'2',decision:'hold'})+'\n');
+ const before=liveDashboardData(root,id);
+ save(path.join(dir,'state.json'),{status:'running_batch',batches:[],currentRunId:b});
+ const after=liveDashboardData(root,id);
+ assert.equal(before.judged,2);assert.equal(after.judged,2);assert.equal(after.reviewed,2);assert.equal(after.adopted,0);
+ assert.equal(after.checked,15);assert.equal(after.recent[0].productId,'2');assert.ok(after.updatedAt);assert.equal(after.events[0].sourceId,'2');
+ assert.equal(after.lastBatch.judged,1);assert.equal(after.status,'judging');
+ save(path.join(root,b,'batch-state.json'),{status:'collecting',collected:1,productCount:5,results:[]});
+ assert.equal(liveDashboardData(root,id).status,'collecting');
+});
 test('start endpoint accepts only a same-origin request for the displayed work',async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cream-start-endpoint-')),id='work-11111111-2222-3333-4444-555555555555';
  fs.mkdirSync(path.join(root,'work-orders'),{recursive:true});fs.writeFileSync(path.join(root,'work-orders',id+'.json'),JSON.stringify({id,status:'open',continuous:true,createdAt:'2026-11-10T00:00:00Z'}));

@@ -14,12 +14,13 @@ const alive=pid=>{try{if(!Number.isSafeInteger(pid)||pid<1)return false;process.
 const safeWorkId=id=>typeof id==='string'&&/^work-[a-f0-9-]{36}$/.test(id);
 const safeBatchId=id=>typeof id==='string'&&/^batch-[a-f0-9-]{36}$/.test(id);
 const firstLine=text=>String(text||'').split(/[\r\n]/)[0].slice(0,220);
+const modified=file=>{try{return fs.statSync(file).mtimeMs;}catch{return 0;}};
 
 function recentEvents(file){
  try{
   const fd=fs.openSync(file,'r');let chunk;
   try{const n=fs.fstatSync(fd).size,size=Math.min(n,65536);chunk=Buffer.alloc(size);fs.readSync(fd,chunk,0,size,n-size);}finally{fs.closeSync(fd);}
-  return chunk.toString('utf8').split(/\r?\n/).flatMap(line=>{try{const e=JSON.parse(line);return e.type?[{type:e.type,sourceId:e.sourceId||null,rank:e.rank||null,reason:e.reason||e.error||null,decision:e.decision||null,found:e.found??null,retryAt:e.retryAt||null}]:[];}catch{return [];}}).slice(-12).reverse();
+  return chunk.toString('utf8').split(/\r?\n/).flatMap(line=>{try{const e=JSON.parse(line);return e.type&&!['agent_message','thread_started','turn_completed','tool_call','owner_ready'].includes(e.type)?[{type:e.type,sourceId:e.sourceId||e.productId||null,rank:e.rank||null,reason:e.reason||e.error||e.code||null,decision:e.decision||null,found:e.found??null,retryAt:e.retryAt||null}]:[];}catch{return [];}}).slice(-12).reverse();
  }catch{return [];}
 }
 export function liveDashboardData(root=defaultRoot,workId){
@@ -41,11 +42,17 @@ export function liveDashboardData(root=defaultRoot,workId){
  const monitorFresh=monitor?.at&&Date.now()-Date.parse(monitor.at)<30000;
  const workerPid=Number((()=>{try{return fs.readFileSync(path.join(dir,'continuous.lock'),'utf8');}catch{return 0;}})());
  const workerAlive=alive(workerPid)||alive(read(path.join(dir,'process.json'))?.pid);
- const batches=(state.batches||[]).filter(b=>safeBatchId(b.runId));
+ // Work reservations survive restarts; state.batches only covers this worker's run.
+ const batches=[...new Map([...(work.entries||[]),...(state.batches||[]),{runId:state.currentRunId}].filter(b=>safeBatchId(b.runId)).map(b=>[b.runId,b])).values()];
+ const general=!work.scopeMode&&Number.isSafeInteger(work.targetProducts);
+ let updatedMs=modified(path.join(dir,'state.json')),collected=0;
  const recent=[];let judged=0,reviewed=0,adopted=0,held=0,excluded=0;
  for(const batch of batches){
   const data=read(path.join(root,batch.runId,'batch-state.json'));
+  updatedMs=Math.max(updatedMs,modified(path.join(root,batch.runId,'batch-state.json')));
+  collected+=data?.collected??(data?.status==='complete'?data.productCount||0:0);
   for(const row of data?.results||[]){
+   if(row.status!=='complete')continue;
    if(row.status==='complete')judged++;
    if(row.assessment?.reviewId)reviewed++;
    if(row.assessment?.decision==='adopt')adopted++;
@@ -57,20 +64,20 @@ export function liveDashboardData(root=defaultRoot,workId){
  recent.sort((a,b)=>String(b.at).localeCompare(String(a.at)));
  const current=safeBatchId(state.currentRunId)?read(path.join(root,state.currentRunId,'batch-state.json')):null;
  const activeJudging=workerAlive&&state.status==='running_batch'&&current?.status==='judging';
- const status=work.status==='stopped'||state.status==='stopped'?'stopped':state.status==='complete'?'complete':!workerAlive?'offline':monitorFresh&&monitor.severity==='error'?'waiting':state.status==='waiting_for_retry'?'waiting':state.status==='recovering'?'recovering':state.status==='running_batch'?'judging':state.status==='discovering'?'discovering':state.status||'starting';
+ const status=work.status==='stopped'||state.status==='stopped'?'stopped':state.status==='complete'?'complete':!workerAlive?'offline':monitorFresh&&monitor.severity==='error'?'waiting':state.status==='waiting_for_retry'?'waiting':state.status==='recovering'?'recovering':state.status==='running_batch'?(current?.status==='judging'?'judging':'collecting'):state.status==='discovering'?'discovering':state.status||'starting';
  return {
   version:1,observedAt:new Date().toISOString(),workId:work.id,status,workerAlive,continuous:work.continuous===true,
-  checked:state.checkedSources||0,qualified:state.profitableProductsFound||0,initialTarget:work.targetSources||work.targetProfitableProducts||work.targetProducts||null,scopeMode:work.scopeMode||null,
+  checked:general?collected:state.checkedSources||0,qualified:state.profitableProductsFound||0,initialTarget:work.targetSources||work.targetProfitableProducts||work.targetProducts||null,scopeMode:work.scopeMode||null,
   lookupSkippedCount:lookupSkipped.length,lookupSkipped:lookupSkipped.slice(0,50),
   judged,reviewed,adopted,held,excluded,pendingPackets:state.pendingSourceIds?.length||0,retrySources:state.retrySources?.length||0,
   brandPlan:state.brandPlan||null,
   current:{category:state.currentCategory||null,rank:state.currentSource?.brandRank||state.currentSource?.rank||null,brand:state.currentSource?.brandName||null,name:state.currentSource?.productName||null,sourceId:state.currentSource?.productId||null},
-  lastBatch:{runId:state.currentRunId||null,status:current?.status||null,productCount:current?.productCount||0,judged:current?.judged||0},
+  lastBatch:{runId:state.currentRunId||null,status:current?.status||null,productCount:current?.productCount||0,collected:current?.collected||0,judged:(current?.results||[]).filter(r=>r.status==='complete').length},
   agents:{owner:activeJudging?'judging':'idle',reviewer:activeJudging?'possibly_reviewing':'idle'},
-  updatedAt:state.updatedAt||null,retryAt:state.retryAt||null,waitReason:status==='waiting'&&monitorFresh&&monitor.severity==='error'?monitor.reason:state.waitReason||null,error:state.error||null,
+  updatedAt:updatedMs?new Date(updatedMs).toISOString():state.updatedAt||null,retryAt:state.retryAt||null,waitReason:status==='waiting'&&monitorFresh&&monitor.severity==='error'?monitor.reason:state.waitReason||null,error:state.error||null,
   monitor:monitorFresh?{code:monitor.code,status:monitor.status,reason:monitor.reason,handler:monitor.handler,action:monitor.action,remoteBridge:remoteMonitor||monitor.remoteBridge||null,at:monitor.at}:null,
   healthMonitor:healthMonitor?{active:!!healthMonitorFresh&&healthMonitorAlive,at:healthMonitor.at,status:healthMonitor.status,reason:healthMonitor.reason,code:healthMonitor.code,ai:healthMonitor.ai||null,mode:'read-only'}:null,
-  featured:recent.find(r=>r.qualified)||null,recent:recent.slice(0,8),events:recentEvents(path.join(dir,'continuous.log')),
+  featured:recent.find(r=>r.qualified)||null,recent:recent.slice(0,8),events:recentEvents(path.join(dir,general?'runtime.log':'continuous.log')),
  };
 }
 export async function startDashboardWork({root,workId,client=new BackgroundClient(),continueWork=control}={}){
