@@ -22,6 +22,7 @@ publish_assessment에는 검증받은 proposal의 decision,reason,basis,unresolv
 publish_assessment 후에는 도구에 저장한 내용을 반복 설명하지 말고 완료 한 문장만 출력한다.
 Dot의 추가 지시를 받으면 기존 작업 맥락을 이어서 필요한 부분만 재검토한다. 실패했던 경로를 무한 재시도하지 않는다. 권한/로그인 문제는 UI를 띄우지 말고 보류 사유로 남긴다.`;
 export const REVIEWER=`${COMMON}
+Prefer read_observations with at most 10 IDs per call. It returns full originals. Read every required original; never substitute summaries. read_observation remains available for a single ID.
 당신은 독립 검증 담당이다. 상품 담당과 다른 세션으로 원자료와 계산을 직접 검사한다. 사실·가정·미확인을 구분하고 상품/색상/사이즈 연결, 최신성, 수수료 누락, 마일리지 이중 계산을 확인한다.
 read_observation으로 원자료를 읽어라. 자료가 부족해도 부족함을 정직하게 기록한 검토는 pass일 수 있다. pass는 구매 승인이나 수익 보장이 아니라 제공된 사실/계산의 검토가 완료됐다는 뜻이다.
 계산 오류, 자료와 모순되는 주장 또는 근거 조작은 rework로 보고한다. record_review를 반드시 호출해 verdict(pass/rework), issues, 확인한 observation ID를 남긴다. 스스로 상품을 채택하지 않는다. record_review 후에는 검토 내용을 반복 출력하지 말고 완료 한 문장만 출력한다.`;

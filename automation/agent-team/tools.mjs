@@ -17,6 +17,7 @@ export const TOOL_DEFINITIONS=[
   def('team_state','Read the mission, saved observations, calculations, reviews and progress.',schema({})),
   def('read_market_schema','Read the No1 price-table schema: per-size original 30-day volume, fast/normal/instant prices, displayed margins when available, actual fee settings and exact as-of timestamp. Distinguish upstream estimates, actual records, displayed margins and formula results. No network/UI.',schema({desiredSellingPrice:{type:'integer',minimum:0}},[])),
   def('read_margin_report','Read per-option No1-compatible margin amount, return rate and profit/loss/break-even/unknown for fast, normal, instant and desired selling prices. Uses collected evidence only, no network/UI. Default fees are explicit No1 defaults, not user settings. Desired price is hypothetical; missing prices stay unknown.',schema({desiredSellingPrice:num,taxMode:{type:'boolean'},fees:schema({kreamPercent:{type:'number',minimum:0,maximum:100},kreamInspectionFee:{type:'integer',minimum:0},poizonPercent:{type:'number',minimum:0,maximum:100},poizonMinFee:{type:'integer',minimum:0},poizonMaxFee:{type:'integer',minimum:0}},[])},[])),
+  def('read_observations','Read up to 10 immutable originals or saved scenarios in one call. Returns full records, not summaries. Every required original must still be read.',schema({ids:{type:'array',items:{type:'string',minLength:1},minItems:1,maxItems:10,uniqueItems:true}})),
   def('read_observation','Read immutable original evidence or a saved numeric scenario by its ID.',schema({id:str})),
   def('collect_no1','Collect the scoped product through the authenticated background No1 adapter. May use an isolated guest cart internally. Never opens a UI or purchases.',schema({refreshReason:str})),
   def('investigate','Choose a collection operation for the current product only. Arguments are JSON encoded. market_page:{pid}; bind_identity:{pid,model,title,quote,file}; search_sources:{pid,query}; catalog_page:{pid,catalogIndex}; inspect_offer:{offerId}; read_evidence:{file,offset?,length?}. No desktop UI. Do not repeat an authentication failure.',schema({operation:{type:'string',enum:['market_page','bind_identity','search_sources','catalog_page','inspect_offer','read_evidence']},arguments:str})),
@@ -25,7 +26,7 @@ export const TOOL_DEFINITIONS=[
   def('record_review','Independent reviewer only. Record source verification and inconsistencies; pass is not a profitability or purchase approval.',schema({verdict:{type:'string',enum:['pass','rework']},issues:arr,basis:arr})),
   def('publish_assessment','Product owner only. Persist AI adoption/hold/exclude judgment with a current independent review. Unknown facts remain visible; never purchases.',schema({decision:{type:'string',enum:['adopt','hold','exclude']},reason:str,basis:arr,unresolved:arr,reviewId:str})),
 ];
-export const reviewTools=TOOL_DEFINITIONS.filter(x=>['team_state','read_musinsa_signals','read_market_schema','read_margin_report','read_observation','record_review'].includes(x.name));
+export const reviewTools=TOOL_DEFINITIONS.filter(x=>['team_state','read_musinsa_signals','read_market_schema','read_margin_report','read_observation','read_observations','record_review'].includes(x.name));
 export const ownerTools=TOOL_DEFINITIONS.filter(x=>x.name!=='record_review');
 
 export class TeamTools {
@@ -56,6 +57,14 @@ export class TeamTools {
     }
     if(tool==='read_margin_report')return marginReport(this.store.data.observations,args);
     if(tool==='read_market_schema')return marketSchemas(this.store.data.observations,args);
+    if(tool==='read_observations'){
+      const ids=args.ids;
+      if(!Array.isArray(ids)||ids.length<1||ids.length>10||ids.some(id=>typeof id!=='string'||!id.length)||new Set(ids).size!==ids.length||Object.keys(args).some(k=>k!=='ids'))throw Error('OBSERVATION_BATCH_INVALID');
+      // Resolve the entire batch before crediting any reviewer reads.
+      const originals=ids.map(id=>this.store.read(id));
+      if(reviewer){if(!this.reviewReads.has(threadId))this.reviewReads.set(threadId,new Set());for(const id of ids)this.reviewReads.get(threadId).add(id);}
+      return originals;
+    }
     if(tool==='read_observation'){
       const observation=this.store.read(args.id);
       if(reviewer){if(!this.reviewReads.has(threadId))this.reviewReads.set(threadId,new Set());this.reviewReads.get(threadId).add(args.id);}

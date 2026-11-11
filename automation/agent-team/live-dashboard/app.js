@@ -76,6 +76,7 @@ function renderSkipped(data){
 function render(data){
  const health=el('health-monitor-detail');
  if(health){const m=data.healthMonitor;health.textContent=!m?'AI 감시: 실행 전':!m.active?'AI 감시: 종료 또는 연결 확인 필요':m.ai?.status==='running'?`AI 감시: 이상 진단 중 · ${m.reason}`:m.status==='healthy'?'AI 감시: 정상 · 10초 주기 점검':`AI 감시: ${m.reason}${m.ai?.status==='complete'?' · '+m.ai.summary:''}`;}
+ if(health&&data.recoveryMonitor){const r=data.recoveryMonitor;const labels={watching:'대기',restarting:'재개 요청 중',restarted:'재개됨',cooldown:'재시도 간격 대기',blocked:'확인 필요',waiting:'연결 대기',complete:'종료',stopped:'중지'};health.textContent+=` · 자동 복구: ${r.active?labels[r.status]||r.status:'종료 또는 연결 확인 필요'}${['blocked','waiting'].includes(r.status)?' ('+r.reason+')':''} · 재개 ${r.attempts}회`;}
  snapshot=data;renderStart(data);const active=data.workerAlive&&['discovering','collecting','judging','recovering'].includes(data.status);
  if(el('checked-caption'))set('checked-caption',!data.scopeMode?'수집 완료 · 선행수집 포함':'실제 처리된 구매처 상품');
  const waiting=data.status==='waiting',offline=data.status==='offline'||data.status==='stopped';

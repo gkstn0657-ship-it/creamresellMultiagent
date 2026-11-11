@@ -36,6 +36,7 @@ export function liveDashboardData(root=defaultRoot,workId){
  }));
  const monitor=read(path.join(dir,'monitor.json'));
  const healthMonitor=read(path.join(dir,'health-monitor.json'));
+ const recoveryMonitor=read(path.join(dir,'exploration-watchdog.json'));
  const healthMonitorFresh=healthMonitor?.at&&Date.now()-Date.parse(healthMonitor.at)<30000;
  const healthMonitorAlive=alive(healthMonitor?.pid)&&!healthMonitor?.endedAt;
  const remoteMonitor=read(path.join(dir,'remote-monitor.json'));
@@ -77,6 +78,7 @@ export function liveDashboardData(root=defaultRoot,workId){
   updatedAt:updatedMs?new Date(updatedMs).toISOString():state.updatedAt||null,retryAt:state.retryAt||null,waitReason:status==='waiting'&&monitorFresh&&monitor.severity==='error'?monitor.reason:state.waitReason||null,error:state.error||null,
   monitor:monitorFresh?{code:monitor.code,status:monitor.status,reason:monitor.reason,handler:monitor.handler,action:monitor.action,remoteBridge:remoteMonitor||monitor.remoteBridge||null,at:monitor.at}:null,
   healthMonitor:healthMonitor?{active:!!healthMonitorFresh&&healthMonitorAlive,at:healthMonitor.at,status:healthMonitor.status,reason:healthMonitor.reason,code:healthMonitor.code,ai:healthMonitor.ai||null,mode:'read-only'}:null,
+  recoveryMonitor:recoveryMonitor?{active:alive(recoveryMonitor.pid)&&Date.now()-Date.parse(recoveryMonitor.at)<30000,at:recoveryMonitor.at,status:recoveryMonitor.status,reason:recoveryMonitor.reason,attempts:recoveryMonitor.attempts?.length||0,mode:recoveryMonitor.mode}:null,
   featured:recent.find(r=>r.qualified)||null,recent:recent.slice(0,8),events:recentEvents(path.join(dir,general?'runtime.log':'continuous.log')),
  };
 }

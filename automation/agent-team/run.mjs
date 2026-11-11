@@ -11,6 +11,18 @@ import {startEvidenceServer} from './evidence-server.mjs';
 import {validatePacket} from './packets.mjs';
 import {offerProductId} from './market-offer.mjs';
 const ROOT=fileURLToPath(new URL('../../',import.meta.url));
+export async function ensureReviewRecorded({store,server,threadId,expectedBasis,stopped=()=>false}){
+  let review=store.data.reviews.findLast(x=>x.threadId===threadId);
+  if(!review){
+    if(stopped())throw Error('STOP_REQUESTED');
+    if(store.basis()!==expectedBasis)throw Error('REVIEW_BASIS_CHANGED');
+    await server.runTurn(threadId,'The review was NOT saved. Your previous text did not call record_review. Call record_review now with your independent verdict, issues, and the evidence IDs you actually read. A prose reply does not persist a review. Do not invent IDs or report success without a successful tool result.',{timeoutMs:60000});
+    review=store.data.reviews.findLast(x=>x.threadId===threadId);
+  }
+  if(!review)throw Error('REVIEW_NOT_RECORDED');
+  if(review.basis!==store.basis())throw Error('REVIEW_BASIS_CHANGED');
+  return review;
+}
 export async function runTeam({dir,mission,packet=null,resume=false,replay=null,message=null,timeoutMs=300000,onEvent=()=>{},serverFactory=options=>new CodexServer(options)}={}) {
   dir=path.resolve(dir);fs.mkdirSync(dir,{recursive:true});
   if(packet)validatePacket(packet);
@@ -68,12 +80,14 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
       const threadId=response.thread.id;actor(threadId,'reviewer');
       const ids=[...store.data.observations,...store.data.calculations].filter(x=>x.active!==false).map(x=>x.id);
       Object.assign(actors.find(x=>x.threadId===threadId),{model:selected.model,proposalHash:proposalHash(proposal),reviewBasis:before,requiredReads:ids});store.save();
-      await server.runTurn(threadId,JSON.stringify({task:'모든 evidenceIds의 원자료와 계산을 read_observation으로 직접 읽고 proposal의 판단이 근거와 모순되지 않는지 독립 검증한 후 record_review를 호출하라.',question,proposal,evidenceIds:ids,expectedBasis:before}),{timeoutMs:120000});
-      const review=store.data.reviews.findLast(x=>x.threadId===threadId);
-      if(!review)throw Error('REVIEW_NOT_RECORDED');if(review.basis!==store.basis())throw Error('REVIEW_BASIS_CHANGED');return review;
+      await server.runTurn(threadId,JSON.stringify({task:'모든 evidenceIds의 원자료와 계산을 read_observation으로 직접 읽고 proposal의 판단이 근거와 모순되지 않는지 독립 검증한 후 record_review를 호출하라.',readInstructions:"Use read_observations in batches of at most 10 IDs. Read every evidenceId as a full original before record_review. Existing calculations are evidence; do not repeat them merely to resume.",question,proposal,evidenceIds:ids,expectedBasis:before}),{timeoutMs:120000});
+      return ensureReviewRecorded({store,server,threadId,expectedBasis:before,stopped:()=>stopped||fs.existsSync(path.join(dir,'STOP'))});
     }});
   try {
     if(fs.existsSync(path.join(dir,'STOP')))throw Error('STOP_REQUESTED');
+    if(resume&&store.data.assessment?.evidenceBasis===store.basis()){
+      store.data.status='complete';emit('assessment_complete',{decision:store.data.assessment.decision,readiness:store.data.assessment.readiness,recoveredFrom:'PERSISTED_ASSESSMENT'});return store.data;
+    }
     evidenceServer=await startEvidenceServer(store);
     Object.assign(server.config,{'mcp_servers.cream_evidence.command':process.execPath,
       'mcp_servers.cream_evidence.args':[fileURLToPath(new URL('./evidence-mcp.mjs',import.meta.url)),evidenceServer.file],
@@ -118,7 +132,18 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
     if(!store.data.assessment||store.data.assessment.evidenceBasis!==store.basis())throw Error('ASSESSMENT_NOT_COMPLETE');
     store.data.status='complete';emit('assessment_complete',{decision:store.data.assessment.decision,readiness:store.data.assessment.readiness});
     return store.data;
-  }catch(e){store.data.status=stopped||e.message==='STOP_REQUESTED'?'stopped':'needs_attention';emit('run_incomplete',{code:e.message});throw e;}
+  }catch(e){
+    // publish_assessment persists the reviewed result before the Codex turn
+    // itself is acknowledged. If that acknowledgement times out, keep the
+    // valid current-basis assessment instead of downgrading the product and
+    // retrying the same completed review forever.
+    const persisted=fs.existsSync(store.file)?JSON.parse(fs.readFileSync(store.file,'utf8')):null;
+    const assessment=store.data.assessment||persisted?.assessment;
+    if(!stopped&&e.message!=='STOP_REQUESTED'&&assessment?.evidenceBasis===store.basis()){
+      store.data.assessment=assessment;store.data.status='complete';emit('assessment_complete',{decision:assessment.decision,readiness:assessment.readiness,recoveredFrom:e.message});return store.data;
+    }
+    store.data.status=stopped||e.message==='STOP_REQUESTED'?'stopped':'needs_attention';emit('run_incomplete',{code:e.message});throw e;
+  }
   finally{clearInterval(controlTimer);await server.close();await evidenceServer?.close();store.save();if(fs.existsSync(lock)&&fs.readFileSync(lock,'utf8')===String(process.pid))fs.unlinkSync(lock);}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href){
