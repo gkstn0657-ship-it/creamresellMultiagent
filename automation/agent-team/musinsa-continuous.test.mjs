@@ -6,3 +6,11 @@ test('continuous supervisor resets only the ranking cycle and stops on explicit 
  let calls=0;const result=await runContinuousMusinsa({root,workId:w.workId,run:async()=>{calls++;return {status:'source_exhausted',settings,profitableProductsFound:1};},intervals:{sourceExhausted:1000},sleep:async()=>fs.writeFileSync(path.join(dir,'STOP'),'user stop')});
  assert.equal(calls,1);assert.equal(result.status,'stopped');const memory=JSON.parse(fs.readFileSync(memoryFile,'utf8'));assert.equal(memory.contexts[JSON.stringify(settings)].categoryIndex,0);assert.deepEqual(memory.seenSourceIds,['1']);assert.deepEqual(memory.seenKreamIds,['2']);
 });
+test('completed finite source inspection can continue until explicitly stopped',async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'cream-continuous-sources-')),w=startWork(root,{targetSources:3,userInstruction:'inspect three',requestId:'sources'}),dir=path.join(root,'explorations',w.workId);
+ fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'state.json'),JSON.stringify({status:'complete',checkedSources:3,batches:[],pendingSourceIds:[]}));
+ const scope=continueWorkUntilStopped(root,w.workId);assert.equal(scope.continuous,true);assert.equal(scope.checkedSources,3);assert.equal(scope.remainingProducts,5);
+ const settings={category:'103000',period:'REALTIME',gender:'A',ageBand:'AGE_BAND_ALL'},memoryFile=path.join(root,'musinsa-discovery','state.json');fs.mkdirSync(path.dirname(memoryFile),{recursive:true});fs.writeFileSync(memoryFile,JSON.stringify({seenSourceIds:['1','2','3'],seenKreamIds:[],contexts:{[JSON.stringify(settings)]:{categoryIndex:1}}}));
+ let calls=0;const result=await runContinuousMusinsa({root,workId:w.workId,run:async()=>{calls++;return {status:'source_exhausted',settings,checkedSources:4};},intervals:{sourceExhausted:1000},sleep:async()=>fs.writeFileSync(path.join(dir,'STOP'),'user stop')});
+ assert.equal(calls,1);assert.equal(result.status,'stopped');assert.equal(JSON.parse(fs.readFileSync(memoryFile,'utf8')).contexts[JSON.stringify(settings)].categoryIndex,0);
+});

@@ -32,7 +32,7 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
     state.status=e.type==='source_retry'?'recovering':e.type==='source_recovered'?'discovering':'needs_attention';emit({...e,sourceId:state.recovery.sourceId,at:state.recovery.at});
   }});
   try{
-    if(state.status==='complete')return state;
+    if(state.status==='complete'&&!work.continuous)return state;
     const plan=work.sourcePlan?validateBrandPlan(work.sourcePlan):null;
     const settings=plan?{category:'000',period:plan.period,gender:'A',ageBand:'AGE_BAND_ALL',source:plan.source}:projectRankingSettings(await client.request('musinsa:ranking:settings',{}));
     if(plan){state.source=plan.source;state.brandPlan={brands:plan.brands,previouslyChecked:plan.previouslyChecked.length};}
@@ -53,7 +53,7 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
     // one-retry policy. Preserve evidence and continue after upgrading a run.
     if(work.continuous&&['source_retry','source_recovery_exhausted'].includes(state.recovery?.type)&&(state.recovery.attempts||state.recovery.attempt)>=2&&state.currentSource?.productId===state.recovery.sourceId&&!seenSources.has(state.currentSource.productId)&&isProductLookupFailure(state.recovery.cmd,state.recovery.error))skipFailedLookup(state.currentSource,state.recovery.error,state.recovery.attempts||state.recovery.attempt);
     const updateProgress=()=>{const summary=workSummary(root,workOrders(root).find(w=>w.id===workId));state.profitableProductsFound=summary.profitableProductsFound??new Set(summary.entries.flatMap(e=>e.qualifiedProductIds)).size;return summary;};
-    const targetReached=()=>sourceTarget?state.checkedSources>=work.targetSources:!work.continuous&&updateProgress().remainingProducts===0;
+    const targetReached=()=>sourceTarget?!work.continuous&&state.checkedSources>=work.targetSources:!work.continuous&&updateProgress().remainingProducts===0;
     const flush=async()=>{
       if(!pending.length||stop())return;
       // Refresh an interrupted, unreserved source packet before creating a new

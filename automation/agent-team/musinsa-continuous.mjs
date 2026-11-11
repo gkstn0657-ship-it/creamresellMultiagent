@@ -13,7 +13,7 @@ export async function runContinuousMusinsa({root,workId,run=runMusinsaProfitSear
  try{
   for(;;){
    const work=workOrders(root).find(w=>w.id===workId);
-   if(!work||work.scopeMode!=='profitable-results'||work.continuous!==true)throw Error('CONTINUOUS_MUSINSA_WORK_REQUIRED');
+   if(!work||!['profitable-results','inspected-sources'].includes(work.scopeMode)||work.continuous!==true)throw Error('CONTINUOUS_MUSINSA_WORK_REQUIRED');
    if(stopped())break;
    const result=await run({root,workId,onEvent});
    if(stopped())break;

@@ -123,3 +123,12 @@ test('explicit continuous scope keeps collecting after the initial profit target
   assert.deepEqual(calls,['1','2']);assert.equal(result.profitableProductsFound,2);assert.equal(result.status,'source_exhausted');
   const summary=workSummary(root,workOrders(root)[0]);assert.equal(summary.remainingToInitialTarget,0);assert.equal(summary.remainingProducts,5);
 });
+test('continuous source scope resumes after its original checked-source target',async()=>{
+  const root=temp(),w=startWork(root,{targetSources:1,userInstruction:'inspect one',requestId:'continuous-sources'}),dir=path.join(root,'explorations',w.workId);
+  fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'state.json'),JSON.stringify({workId:w.workId,status:'complete',checkedSources:1,skipped:[],batches:[],pendingSourceIds:[]}));
+  const scope=continueWorkUntilStopped(root,w.workId);assert.equal(scope.continuous,true);assert.equal(scope.remainingProducts,5);
+  const calls=[],client={request:async cmd=>cmd.endsWith('settings')?{category:'103000',period:'REALTIME',gender:'A',ageBand:'AGE_BAND_ALL'}:{products:[1,2].map(n=>({rank:n,productId:String(n),productName:'jacket',brandName:'brand'}))}};
+  const memoryDir=path.join(root,'musinsa-discovery');fs.mkdirSync(memoryDir,{recursive:true});fs.writeFileSync(path.join(memoryDir,'state.json'),JSON.stringify({version:1,seenSourceIds:['1'],seenKreamIds:[],contexts:{}}));
+  const result=await runMusinsaProfitSearch({root,workId:w.workId,client,collect:async s=>{calls.push(s.productId);return {status:'skipped',reason:'NO_AVAILABLE_STOCK'};}});
+  assert.deepEqual(calls,['2']);assert.equal(result.checkedSources,2);assert.equal(result.status,'source_exhausted');
+});

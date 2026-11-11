@@ -26,7 +26,7 @@ export function workSummary(root,work){
 }
 export function continueWorkUntilStopped(root,workId){
  const work=workOrders(root).find(w=>w.id===workId);
- if(!work||work.scopeMode!=='profitable-results'||work.status==='stopped')throw Error('ACTIVE_MUSINSA_WORK_REQUIRED');
+ if(!work||!['profitable-results','inspected-sources'].includes(work.scopeMode)||work.status==='stopped')throw Error('ACTIVE_MUSINSA_WORK_REQUIRED');
  work.continuous=true;writeJsonAtomic(path.join(orderDir(root),work.id+'.json'),work);
  return workSummary(root,work);
 }
@@ -69,7 +69,7 @@ export function reserveWork(root,{workId,runId,productCount,triggerEventId=null,
  const prefetchAllowed=prefetchAfterRunId&&work.entries.some(e=>e.runId===prefetchAfterRunId)&&read(path.join(root,prefetchAfterRunId,'batch-state.json'))?.status==='judging'&&read(path.join(root,prefetchAfterRunId,'launch.json'))?.managedBy==='deterministic-exploration'&&read(path.join(root,prefetchAfterRunId,'process.json'))?.pid===process.pid&&!summary.entries.some(e=>['prefetching','prefetched'].includes(e.status));
  if(prefetchAfterRunId&&!prefetchAllowed)throw Error('PREFETCH_SCOPE_INVALID');
  if(summary.activeRunIds.some(id=>!prefetchAllowed||id!==prefetchAfterRunId))throw Error('ACTIVE_BATCH_EXISTS: '+summary.activeRunIds.join(','));
- const reservationRemaining=work.scopeMode==='inspected-sources'?work.targetSources-summary.reservedProducts:summary.remainingProducts;
+ const reservationRemaining=work.scopeMode==='inspected-sources'?(work.continuous?workPolicy.maxBatchProducts:work.targetSources-summary.reservedProducts):summary.remainingProducts;
  if(productCount>reservationRemaining)throw Error('WORK_PRODUCT_LIMIT: remaining '+reservationRemaining);
  if(orders.some(w=>workSummary(root,w).activeRunIds.some(id=>!prefetchAllowed||w.id!==work.id||id!==prefetchAfterRunId)))throw Error('ACTIVE_BATCH_EXISTS');
  if(triggerEventId&&orders.some(w=>w.entries.some(e=>e.triggerEventId===triggerEventId)))throw Error('EVENT_FOLLOWUP_ALREADY_STARTED');
