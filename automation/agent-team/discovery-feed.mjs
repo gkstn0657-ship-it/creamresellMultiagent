@@ -1,8 +1,9 @@
+import {CONNECTOR_VERSION} from '../no1-background/chrome-extension/protocol.mjs';
 import {BackgroundClient} from '../no1-background/client.mjs';
 import {discoveryPolicy} from './discovery-policy.mjs';
 export function createDiscoveryFeed({client=new BackgroundClient()}={}){
  return async cursor=>{
-  const state=await client.status();if(!['0.4.0','0.5.0','0.6.0'].includes(state.connectorVersion))throw Error('NO1_CONNECTOR_UPDATE_REQUIRED');
+  const state=await client.status();if(state.connectorVersion!==CONNECTOR_VERSION)throw Error('NO1_CONNECTOR_UPDATE_REQUIRED');
   if(!state.browserConnected)throw Error('NO1_BRIDGE_DISCONNECTED');
   // This installed No1 read handler uses popular_score; no UI search fallback.
   // A whitespace search requests the unfiltered list. Live verification is required.

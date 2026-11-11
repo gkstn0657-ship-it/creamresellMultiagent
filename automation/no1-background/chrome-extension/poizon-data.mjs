@@ -7,6 +7,10 @@ const num=v=>v==null?null:typeof v==='number'&&Number.isFinite(v)&&v>=0?v:fail()
 const signed=v=>v==null?null:typeof v==='number'&&Number.isFinite(v)?v:fail();
 const fields=(o,allowed,required)=>required.every(k=>Object.hasOwn(o,k))&&Object.keys(o).every(k=>allowed.includes(k));
 const model=v=>typeof v==='string'&&/^[\p{L}\p{N}][\p{L}\p{N} ._()/+-]{0,99}$/u.test(v);
+// No1's search parser returns articleNumber as a display string (or an empty
+// string when absent). It is not constrained to our outbound request grammar.
+// Preserve that evidence without treating unrelated hits as valid requests.
+export const validSearchStyleCode=v=>typeof v==='string'&&v.length<=500&&!/[\x00-\x1f\x7f]/.test(v);
 const rows=v=>Array.isArray(v)&&v.length<=1000?v:fail();
 export function validPoizonRequest(cmd,p){
  if(cmd.endsWith(':margin-settings'))return Object.keys(p).length===0;
@@ -16,11 +20,11 @@ export function validPoizonRequest(cmd,p){
  if(cmd.endsWith(':chart'))return fields(p,['spuId','globalSpuId','skuId','range','saleRegion'],['spuId','skuId','range','saleRegion'])&&id(p.spuId)&&id(p.skuId)&&(p.globalSpuId===undefined||id(p.globalSpuId))&&p.range===1&&['GLOBAL','LOCAL'].includes(p.saleRegion);
  return false;
 }
-function product(p){if(!p||!id(String(p.spuId))||!model(p.styleCode))fail();return {spuId:String(p.spuId),globalSpuId:p.globalSpuId==null?null:id(String(p.globalSpuId))?String(p.globalSpuId):fail(),styleCode:p.styleCode,name:txt(p.name),colorName:txt(p.colorName),brandName:txt(p.brandName),level1CategoryName:txt(p.level1CategoryName),bidStatus:p.bidStatus==null?null:[0,1].includes(p.bidStatus)?p.bidStatus:fail(),cannotBidMessage:txt(p.cannotBidMessage)};}
+function product(p,search=false){if(!p||!id(String(p.spuId))||!(search?validSearchStyleCode(p.styleCode):model(p.styleCode)))fail();return {spuId:String(p.spuId),globalSpuId:p.globalSpuId==null?null:id(String(p.globalSpuId))?String(p.globalSpuId):fail(),styleCode:p.styleCode,name:txt(p.name),colorName:txt(p.colorName),brandName:txt(p.brandName),level1CategoryName:txt(p.level1CategoryName),bidStatus:p.bidStatus==null?null:[0,1].includes(p.bidStatus)?p.bidStatus:fail(),cannotBidMessage:txt(p.cannotBidMessage)};}
 function size(r){if(!r||!id(String(r.skuId)))fail();return {skuId:String(r.skuId),...Object.fromEntries(['size','sizeKR','sizeUS','sizeEU','color','apparelSize','salesCount','localSalesCount'].map(k=>[k,txt(r[k])])),cnBuyBox:num(r.cnBuyBox),avg30d:num(r.avg30d),editions:Object.fromEntries(Object.entries(r.editions||{}).map(([k,v])=>[txt(k),txt(v)]))};}
 function fee(f){if(!f)fail();const result={rate:num(f.rate),minFee:num(f.minFee),maxFee:num(f.maxFee)};if(Object.values(result).some(v=>v===null)||result.rate>100||result.minFee>result.maxFee)fail();return result;}
 export function projectPoizon(cmd,d,p){
- if(cmd.endsWith(':search'))return {products:rows(d.products).map(product),nextCursor:d.nextCursor==null?null:/^[1-9]\d{0,2}$/.test(d.nextCursor)?String(d.nextCursor):fail()};
+ if(cmd.endsWith(':search'))return {products:rows(d.products).map(p=>product(p,true)),nextCursor:d.nextCursor==null?null:/^[1-9]\d{0,2}$/.test(d.nextCursor)?String(d.nextCursor):fail()};
  if(cmd.endsWith(':prices')){const prod=product(d.product);if(prod.spuId!==p.spuId||prod.styleCode.toUpperCase().replace(/\s/g,'')!==p.styleCode.toUpperCase().replace(/\s/g,''))throw Error('NO1_IDENTITY_MISMATCH');if(typeof d.isApparel!=='boolean')fail();return {product:prod,isApparel:d.isApparel,sizes:rows(d.sizes).map(size)};}
  if(cmd.endsWith(':chart'))return {request:{...p},chart:rows(d.chart).map(r=>{if(typeof r.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(r.date))fail();return {date:r.date,price:num(r.price),count:num(r.count)};}),meta:{symbol:txt(d.meta?.symbol),avgPrice:num(d.meta?.avgPrice),minPrice:num(d.meta?.minPrice),maxPrice:num(d.meta?.maxPrice),salesCount:txt(d.meta?.salesCount),soldInfo:txt(d.meta?.soldInfo),tabName:txt(d.meta?.tabName)}};
  if(cmd.endsWith(':margin-settings')){if(d.source!=='no1_web_saved_settings'||typeof d.taxMode!=='boolean'||!['apparelShoes','goods'].includes(d.category))fail();return {source:d.source,category:d.category,taxMode:d.taxMode,fees:{apparelShoes:fee(d.fees?.apparelShoes),goods:fee(d.fees?.goods)},observedAt:txt(d.observedAt)};}

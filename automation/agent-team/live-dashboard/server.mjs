@@ -34,10 +34,13 @@ export function liveDashboardData(root=defaultRoot,workId){
   url:/^\d{1,12}$/.test(String(s.sourceId))?`https://www.musinsa.com/products/${s.sourceId}`:null,
  }));
  const monitor=read(path.join(dir,'monitor.json'));
+ const healthMonitor=read(path.join(dir,'health-monitor.json'));
+ const healthMonitorFresh=healthMonitor?.at&&Date.now()-Date.parse(healthMonitor.at)<30000;
+ const healthMonitorAlive=alive(healthMonitor?.pid)&&!healthMonitor?.endedAt;
  const remoteMonitor=read(path.join(dir,'remote-monitor.json'));
  const monitorFresh=monitor?.at&&Date.now()-Date.parse(monitor.at)<30000;
  const workerPid=Number((()=>{try{return fs.readFileSync(path.join(dir,'continuous.lock'),'utf8');}catch{return 0;}})());
- const workerAlive=alive(workerPid);
+ const workerAlive=alive(workerPid)||alive(read(path.join(dir,'process.json'))?.pid);
  const batches=(state.batches||[]).filter(b=>safeBatchId(b.runId));
  const recent=[];let judged=0,reviewed=0,adopted=0,held=0,excluded=0;
  for(const batch of batches){
@@ -54,17 +57,19 @@ export function liveDashboardData(root=defaultRoot,workId){
  recent.sort((a,b)=>String(b.at).localeCompare(String(a.at)));
  const current=safeBatchId(state.currentRunId)?read(path.join(root,state.currentRunId,'batch-state.json')):null;
  const activeJudging=workerAlive&&state.status==='running_batch'&&current?.status==='judging';
- const status=work.status==='stopped'||state.status==='stopped'?'stopped':!workerAlive?'offline':monitorFresh&&monitor.severity==='error'?'waiting':state.status==='waiting_for_retry'?'waiting':state.status==='recovering'?'recovering':state.status==='running_batch'?'judging':state.status==='discovering'?'discovering':state.status||'starting';
+ const status=work.status==='stopped'||state.status==='stopped'?'stopped':state.status==='complete'?'complete':!workerAlive?'offline':monitorFresh&&monitor.severity==='error'?'waiting':state.status==='waiting_for_retry'?'waiting':state.status==='recovering'?'recovering':state.status==='running_batch'?'judging':state.status==='discovering'?'discovering':state.status||'starting';
  return {
   version:1,observedAt:new Date().toISOString(),workId:work.id,status,workerAlive,continuous:work.continuous===true,
-  checked:state.checkedSources||0,qualified:state.profitableProductsFound||0,initialTarget:work.targetProfitableProducts||null,
+  checked:state.checkedSources||0,qualified:state.profitableProductsFound||0,initialTarget:work.targetSources||work.targetProfitableProducts||null,scopeMode:work.scopeMode||null,
   lookupSkippedCount:lookupSkipped.length,lookupSkipped:lookupSkipped.slice(0,50),
   judged,reviewed,adopted,held,excluded,pendingPackets:state.pendingSourceIds?.length||0,retrySources:state.retrySources?.length||0,
-  current:{category:state.currentCategory||null,rank:state.currentSource?.rank||null,name:state.currentSource?.productName||null,sourceId:state.currentSource?.productId||null},
+  brandPlan:state.brandPlan||null,
+  current:{category:state.currentCategory||null,rank:state.currentSource?.brandRank||state.currentSource?.rank||null,brand:state.currentSource?.brandName||null,name:state.currentSource?.productName||null,sourceId:state.currentSource?.productId||null},
   lastBatch:{runId:state.currentRunId||null,status:current?.status||null,productCount:current?.productCount||0,judged:current?.judged||0},
   agents:{owner:activeJudging?'judging':'idle',reviewer:activeJudging?'possibly_reviewing':'idle'},
   updatedAt:state.updatedAt||null,retryAt:state.retryAt||null,waitReason:status==='waiting'&&monitorFresh&&monitor.severity==='error'?monitor.reason:state.waitReason||null,error:state.error||null,
   monitor:monitorFresh?{code:monitor.code,status:monitor.status,reason:monitor.reason,handler:monitor.handler,action:monitor.action,remoteBridge:remoteMonitor||monitor.remoteBridge||null,at:monitor.at}:null,
+  healthMonitor:healthMonitor?{active:!!healthMonitorFresh&&healthMonitorAlive,at:healthMonitor.at,status:healthMonitor.status,reason:healthMonitor.reason,code:healthMonitor.code,ai:healthMonitor.ai||null,mode:'read-only'}:null,
   featured:recent.find(r=>r.qualified)||null,recent:recent.slice(0,8),events:recentEvents(path.join(dir,'continuous.log')),
  };
 }

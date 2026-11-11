@@ -17,7 +17,7 @@ export async function startExploration(root,{workId,resume=false},options={}){
  if(typeof resume!=='boolean')throw Error('INVALID_RESUME_FLAG');
  return withWorkLock(root,async()=>{
   let work=workOrders(root).find(w=>w.id===workId);if(!work)throw Error('USER_WORK_SCOPE_REQUIRED');
-  if(work.scopeMode==='profitable-results')throw Error('USE_MUSINSA_PROFIT_RUNNER');
+  if(['profitable-results','inspected-sources'].includes(work.scopeMode))throw Error('USE_MUSINSA_PROFIT_RUNNER');
   if(work.status==='stopped'){if(!resume)throw Error('USER_WORK_SCOPE_REQUIRED');reopenWork(root,workId);work=workOrders(root).find(w=>w.id===workId);}
   const summary=workSummary(root,work),prior=explorationState(root,workId);
   if(prior?.workerAlive||prior?.status==='complete')return {...prior,reused:true,launched:false};

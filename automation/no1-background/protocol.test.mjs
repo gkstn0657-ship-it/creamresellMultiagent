@@ -86,3 +86,11 @@ test('platform status drops login ID; unavailable prices remain null', () => {
   assert.deepEqual(projectData('platform:status', {sessions: [{platform: 'kream', status: 'active', loginId: 'private-email'}]}), {sessions: [{platform: 'kream', status: 'active'}]});
   assert.deepEqual(projectData('market:kream:prices', {prices: [{size: 'L', option: '100', buyPrice: null, sellPrice: 100}]}), {prices: [{size: 'L', option: '100', buyPrice: null, sellPrice: 100, lastSalePrice: null}]});
 });
+
+test('POIZON rejection emits metadata only and still rejects when diagnostic sink fails',async()=>{
+ FakeSocket.behavior=(s,req)=>s.receive(response(req,{products:[{spuId:'123',styleCode:'KS7366',bidStatus:'PRIVATE_VALUE',token:'PRIVATE_VALUE'}]}));
+ let seen;const options={cmd:'market:poizon:search',payload:{keyword:'KS7366',cursor:'1'},onValidationFailure:d=>{seen=d;}};
+ await assert.rejects(call(options),/NO1_INVALID_RESPONSE/);
+ assert.equal(seen.field,'bidStatus');assert.equal(seen.type,'string');assert.ok(!JSON.stringify(seen).includes('PRIVATE_VALUE'));assert.ok(Number.isFinite(Date.parse(seen.capturedAt)));
+ await assert.rejects(call({...options,onValidationFailure:()=>{throw Error('SECRET_SINK_ERROR');}}),/NO1_INVALID_RESPONSE/);
+});

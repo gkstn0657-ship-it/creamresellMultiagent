@@ -11,6 +11,7 @@ import {recoveringClient} from './source-recovery.mjs';
 import {reviewModel} from './roles.mjs';
 import {runMusinsaProfitSearch} from './musinsa-profit-runner.mjs';
 import {startWork,workOrders,workSummary} from './work-orders.mjs';
+import {classifyError} from './error-catalog.mjs';
 const candidate={productId:'99',productUrl:'https://www.musinsa.com/products/99',productName:'Test jacket',rank:1};
 const adopted=id=>({productId:id,status:'complete',assessment:{decision:'adopt',reviewId:'verified-review'}});
 function fixture({kream=false,kreamError,poizonError}={}){
@@ -95,7 +96,21 @@ test('one failed market retries once and does not suppress the other; auth and s
  assert.equal(r.packet.productId,'123');assert.equal(r.packet.observations[0].payload.marketChecks.poizon.lookupFailed,true);assert.deepEqual(waits,[1000]);assert.equal(f.calls.filter(([cmd])=>cmd==='market:poizon:search').length,2);
  const g=fixture({kreamError:'KREAM_SEARCH_FAILED'});assert.equal((await collectRankingCandidate(candidate,{client:recoveringClient(g.client,{lookupDelays:[1000],sleep:async()=>{}})})).packet.productId,'poizon-123');
  await assert.rejects(collectRankingCandidate(candidate,{client:fixture({poizonError:'POIZON_LOGIN_REQUIRED'}).client}),/POIZON_LOGIN_REQUIRED/);
+ await assert.rejects(collectRankingCandidate(candidate,{client:fixture({poizonError:'NO1_INVALID_RESPONSE'}).client}),/NO1_INVALID_RESPONSE/);
  let attempts=0;await assert.rejects(collectRankingCandidate(candidate,{client:recoveringClient({request:async()=>{attempts++;throw Error('STOCK_CHECK_FAILED');}},{lookupDelays:[1000],sleep:async()=>{}})}),/STOCK_CHECK_FAILED/);assert.equal(attempts,2);
+});
+test('unrequestable search models cannot poison a valid exact match or become a price request',async()=>{
+ const f=fixture(),base=f.client.request;
+ const unsupported={spuId:'12',styleCode:'MODEL/OTHER@MODEL',colorName:'BLACK',bidStatus:1};
+ f.client.request=async(cmd,p)=>cmd==='market:poizon:search'?{products:[unsupported,{spuId:'123',styleCode:'MODEL',colorName:'BLACK',bidStatus:1}],nextCursor:null}:base(cmd,p);
+ const r=await collectRankingCandidate(candidate,{client:f.client});
+ assert.equal(r.packet.productId,'poizon-123');
+ assert.deepEqual(f.calls.filter(([cmd])=>cmd==='market:poizon:prices').map(([,p])=>p.spuId),['123']);
+ f.client.request=async(cmd,p)=>cmd==='market:poizon:search'?{products:[unsupported],nextCursor:null}:base(cmd,p);
+ const skipped=await collectRankingCandidate(candidate,{client:f.client});
+ assert.equal(skipped.status,'skipped');assert.equal(skipped.marketChecks.poizon.reason,'POIZON_UNSUPPORTED_MARKET_MODEL_FORMAT');
+ assert.equal(classifyError({reason:skipped.marketChecks.poizon.reason}).code,211);
+ assert.equal(classifyError({reason:'NO1_INVALID_RESPONSE'}).code,400);
 });
 test('POIZON packet and namespaced dedup survive interruption and increment the work count once',async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cream-poizon-resume-')),w=startWork(root,{targetProfitableProducts:1,userInstruction:'find one',requestId:'poizon-resume'});

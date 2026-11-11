@@ -10,6 +10,33 @@ function packet(id){
 }
 const adopted=id=>({productId:String(id),status:'complete',assessment:{decision:'adopt',reviewId:'review-test'}});
 
+test('finite source inspection counts skipped sources, flushes partial batches and resumes the category in the next work',async()=>{
+ const root=temp(),calls=[],settings={category:'000',period:'REALTIME',gender:'A',ageBand:'AGE_BAND_ALL'};
+ const client={request:async cmd=>cmd.endsWith('settings')?settings:{products:[1,2,3,4,5].map(n=>({rank:n,productId:String(n),productName:'shoe',brandName:'brand'}))}};
+ const collect=async s=>{calls.push(s.productId);return s.productId==='2'?{status:'skipped',reason:'NO_AVAILABLE_STOCK'}:{status:'collected',kreamId:s.productId,packet:packet(s.productId)};};
+ const execute=async({seeds})=>({status:'complete',judged:seeds.length,results:seeds.map(s=>({...adopted(s.kreamId),assessment:{decision:'hold',reviewId:'review-test'}}))});
+ const w=startWork(root,{targetSources:3,userInstruction:'inspect 3',requestId:'finite'});
+ assert.throws(()=>startWork(root,{targetProducts:3,userInstruction:'inspect 3',requestId:'finite'}),/SCOPE_CONFLICT/);
+ const result=await runMusinsaProfitSearch({root,workId:w.workId,client,collect,execute});
+ assert.equal(result.status,'complete');assert.equal(result.checkedSources,3);assert.equal(result.profitableProductsFound,0);assert.equal(result.pendingSourceIds.length,0);assert.deepEqual(calls,['1','2','3']);
+ const summary=workSummary(root,workOrders(root)[0]);assert.equal(summary.remainingProducts,0);assert.equal(summary.reservedProducts,2);assert.equal(summary.targetSources,3);
+ const dir=path.join(root,'explorations',w.workId);fs.writeFileSync(path.join(dir,'process.json'),JSON.stringify({pid:0}));
+ await runMusinsaProfitSearch({root,workId:w.workId,client:{request:()=>assert.fail('completed work must not query again')},collect,execute});
+ fs.writeFileSync(path.join(dir,'process.json'),JSON.stringify({pid:0}));
+ const next=startWork(root,{targetSources:1,userInstruction:'inspect 1',requestId:'next'});
+ await runMusinsaProfitSearch({root,workId:next.workId,client,collect,execute});assert.deepEqual(calls,['1','2','3','4']);
+ assert.equal(fs.existsSync(path.join(root,'discovery','discovery.sqlite')),false);
+});
+
+test('finite inspection preserves interrupted packets and reports source exhaustion without inventing completion',async()=>{
+ const root=temp(),w=startWork(root,{targetSources:3,userInstruction:'inspect 3',requestId:'finite-stop'}),stopFile=path.join(root,'explorations',w.workId,'STOP');
+ const client={request:async cmd=>cmd.endsWith('settings')?{category:'103000',period:'REALTIME',gender:'A',ageBand:'AGE_BAND_ALL'}:{products:[{rank:1,productId:'1',productName:'shoe',brandName:'brand'}]}};
+ const first=await runMusinsaProfitSearch({root,workId:w.workId,client,collect:async s=>{fs.writeFileSync(stopFile,'stop');return {status:'collected',kreamId:s.productId,packet:packet(s.productId)};},execute:()=>assert.fail('stopped')});
+ assert.equal(first.checkedSources,1);assert.deepEqual(first.pendingSourceIds,['1']);fs.unlinkSync(stopFile);
+ const last=await runMusinsaProfitSearch({root,workId:w.workId,client,collect:()=>assert.fail('duplicate source'),execute:async()=>({status:'complete',judged:1,results:[adopted(1)]})});
+ assert.equal(last.status,'source_exhausted');assert.equal(last.checkedSources,1);assert.equal(workSummary(root,workOrders(root)[0]).remainingProducts,2);
+});
+
 test('continuous lookup fails twice, waits only one second, skips and does not retry the same source on restart',async()=>{
  const root=temp(),w=startWork(root,{targetProfitableProducts:1,userInstruction:'continue until stopped',requestId:'skip'});continueWorkUntilStopped(root,w.workId);
  const settings={category:'103000',period:'REALTIME',gender:'A',ageBand:'AGE_BAND_ALL'},calls=[],waits=[],events=[];

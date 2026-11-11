@@ -15,3 +15,8 @@ document.querySelector('#connect').addEventListener('click', async () => {
 document.querySelector('#disconnect').addEventListener('click', async () => { await chrome.runtime.sendMessage({type: 'disconnect'}); show('DISCONNECTED'); });
 chrome.storage.onChanged.addListener(() => { void refresh(); });
 void refresh();
+
+// Render only the fixed diagnostic metadata written by the connector validator.
+const diagnostic=document.createElement('pre');diagnostic.id='validation-diagnostic';document.body.append(diagnostic);
+async function refreshDiagnostic(){const {lastValidationFailure:d}=await chrome.storage.local.get('lastValidationFailure');diagnostic.textContent=d?JSON.stringify(d,null,2):'';}
+chrome.storage.onChanged.addListener(()=>void refreshDiagnostic());void refreshDiagnostic();

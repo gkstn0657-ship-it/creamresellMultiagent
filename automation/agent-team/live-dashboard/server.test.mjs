@@ -1,5 +1,15 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {liveDashboardData,createDashboardServer,startDashboardWork} from './server.mjs';
+test('separate AI health monitor reports stale or exited supervision honestly',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'cream-health-panel-')),id='work-11111111-2222-3333-4444-555555555555',dir=path.join(root,'explorations',id);
+ fs.mkdirSync(path.join(root,'work-orders'),{recursive:true});fs.mkdirSync(dir,{recursive:true});
+ fs.writeFileSync(path.join(root,'work-orders',id+'.json'),JSON.stringify({id,status:'open'}));
+ fs.writeFileSync(path.join(dir,'state.json'),JSON.stringify({status:'discovering'}));
+ const file=path.join(dir,'health-monitor.json'),report={at:new Date().toISOString(),pid:process.pid,status:'healthy',reason:'RUNNING',code:200,ai:{status:'idle'}};
+ fs.writeFileSync(file,JSON.stringify(report));assert.equal(liveDashboardData(root,id).healthMonitor.active,true);
+ fs.writeFileSync(file,JSON.stringify({...report,at:'2020-01-01T00:00:00Z'}));assert.equal(liveDashboardData(root,id).healthMonitor.active,false);
+ fs.writeFileSync(file,JSON.stringify({...report,endedAt:new Date().toISOString()}));assert.equal(liveDashboardData(root,id).healthMonitor.active,false);
+});
 test('skipped lookup list distinguishes failed queries from screening exclusions and preserves actual attempts',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cream-skipped-')),id='work-11111111-2222-3333-4444-555555555555',dir=path.join(root,'explorations',id);
  fs.mkdirSync(path.join(root,'work-orders'),{recursive:true});fs.mkdirSync(dir,{recursive:true});

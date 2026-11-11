@@ -88,7 +88,7 @@ export async function control(name,args={},options={}) {
   const profile=name==='cream_musinsa_batch_start'?MUSINSA_PROFILE:'general';
   if(name==='cream_musinsa_batch_start')name='cream_batch_start';
   if(name==='cream_batch_start'){
-    if(profile!=='musinsa-ranking'&&workOrders(root).some(w=>w.id===args.workId&&w.scopeMode==='profitable-results'))throw Error('MUSINSA_PROFILE_REQUIRED');
+    if(profile!=='musinsa-ranking'&&workOrders(root).some(w=>w.id===args.workId&&['profitable-results','inspected-sources'].includes(w.scopeMode)))throw Error('MUSINSA_PROFILE_REQUIRED');
     return withWorkLock(root,async()=>{
     if(workOrders(root).some(w=>{const e=explorationState(root,w.id);return w.status!=='stopped'&&e&&(e.workerAlive||e.status!=='complete');}))throw Error('EXPLORATION_MANAGES_BATCHES: read status; resume the same exploration instead of launching a separate batch');
     const groups=groupProducts(args.products),concurrency=args.concurrency??2;

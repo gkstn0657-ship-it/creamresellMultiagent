@@ -23,3 +23,14 @@ test('Poizon chart retains SKU/region scope and does not treat other platform au
  const p={spuId:'1',skuId:'2',range:1,saleRegion:'GLOBAL'},d=projectData('market:poizon:chart',{chart:[{date:'2026-11-10',price:100000,count:2}],meta:{symbol:'₩',salesCount:'2'}},p);assert.deepEqual(d.request,p);
  assert.throws(()=>projectData('platform:status',{sessions:[{platform:'kream',status:'active'}]},{platform:'poizon'}),/RESPONSE/);
 });
+test('search display model strings do not poison valid hits or relax outbound identity',()=>{
+ // KS7366,KS9363 was observed in a related hit alongside the exact KS7366 listing.
+ const d={products:[{spuId:'1',styleCode:'KS7366'},{spuId:'2',styleCode:'OTHER@MODEL'},{spuId:'3',styleCode:''},{spuId:'4',styleCode:' KS7366 / OTHER:MODEL ',token:'secret'},{spuId:'5',styleCode:'KS7366,KS9363'}],nextCursor:null};
+ const clean=projectData('market:poizon:search',d,{});
+ assert.equal(clean.products.length,5);assert.deepEqual(clean.products.map(p=>p.styleCode),d.products.map(p=>p.styleCode));
+ assert.deepEqual(projectData('market:poizon:search',clean,{}),clean);assert.doesNotMatch(JSON.stringify(clean),/secret|token/);
+ for(const p of clean.products.slice(1)){
+  assert.throws(()=>validateCommand('market:poizon:prices',{spuId:p.spuId,styleCode:p.styleCode}),/PAYLOAD/);
+  assert.throws(()=>projectData('market:poizon:prices',{product:p,isApparel:true,sizes:[]},{spuId:p.spuId,styleCode:'KS7366'}),/RESPONSE/);
+ }
+});

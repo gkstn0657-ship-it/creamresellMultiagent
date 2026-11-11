@@ -2,6 +2,7 @@ import {sameColor} from './discovery-collector.mjs';
 import {sizeKey} from '../no1-background/size-binding.mjs';
 import {buildPoizonSchema} from './poizon-schema.mjs';
 import {makePacket,validatePacket} from './packets.mjs';
+import {validPoizonRequest} from '../no1-background/chrome-extension/poizon-data.mjs';
 const modelKey=s=>String(s||'').trim().toUpperCase().replace(/\s+/g,'');
 const available=o=>Number.isSafeInteger(o.limitedQty)&&o.limitedQty>0&&o.isAvailable!==false;
 export function matchPoizonOptions(stock,product){
@@ -44,6 +45,7 @@ export async function collectPoizonCandidate(candidate,{client,seenKreamIds=new 
   if(seenKreamIds.has(`poizon-${product.spuId}`)){lastReason='DUPLICATE_POIZON_PRODUCT';continue;}
   if(product.bidStatus===0||product.cannotBidMessage){lastReason='POIZON_BID_UNAVAILABLE';continue;}
   const scope={spuId:product.spuId,...(product.globalSpuId?{globalSpuId:product.globalSpuId}:{})};
+  if(!validPoizonRequest('market:poizon:prices',{...scope,styleCode:product.styleCode})){lastReason='POIZON_UNSUPPORTED_MARKET_MODEL_FORMAT';continue;}
   const market=await client.request('market:poizon:prices',{...scope,styleCode:product.styleCode});
   if(market.product.bidStatus===0||market.product.cannotBidMessage){lastReason='POIZON_BID_UNAVAILABLE';continue;}
   const options=matchPoizonOptions(stock,product).filter(available).map(option=>({option,binding:bindPoizonSize(stock,market,option)})).filter(x=>x.binding);
@@ -54,7 +56,7 @@ export async function collectPoizonCandidate(candidate,{client,seenKreamIds=new 
   const displayedSchema=await client.request('market:poizon:displayed-schema',{spuId:product.spuId});
   const scored=options.map(({option,binding})=>{
    const request={market:'poizon',poizonId:product.spuId,productUrl:candidate.productUrl,model:stock.makerNumber,color:option.firstOption,option:option.size};
-   const payload={mode:'background-relay',request,observedAt:new Date().toISOString(),identity:{sourceProductVerified:true,sourceModelVerified:true,sourceOptionVerified:true,marketModelIndependentlyVerified:true},stock:{...stock,selectedOption:option,selectedStockQuantity:option.limitedQty},benefits,market,sizeBinding:binding.evidence,marketResearch:{marginSettings,displayedSchema},marketIdentityEvidence:{source:'no1-poizon-exact-model-search',market:product,sourceModel:stock.makerNumber,sourceProductId:candidate.productId},rankingSource:{...candidate,source:'no1-musinsa-ranking'},upstreamFreshnessConfirmed:false,actualCheckoutPriceConfirmed:false,missingFields:['upstreamDataAsOf','actualCheckoutPrice','shippingAndSellerFees','couponQuantityEligibilityAtCheckout']};
+   const payload={mode:'background-relay',request,observedAt:new Date().toISOString(),identity:{sourceProductVerified:true,sourceModelVerified:true,sourceOptionVerified:true,marketModelIndependentlyVerified:true},stock:{...stock,selectedOption:option,selectedStockQuantity:option.limitedQty},benefits,market,sizeBinding:binding.evidence,marketResearch:{marginSettings,displayedSchema},marketIdentityEvidence:{source:'no1-poizon-exact-model-search',market:product,sourceModel:stock.makerNumber,sourceProductId:candidate.productId},rankingSource:{...candidate,source:candidate.source||'no1-musinsa-ranking'},upstreamFreshnessConfirmed:false,actualCheckoutPriceConfirmed:false,missingFields:['upstreamDataAsOf','actualCheckoutPrice','shippingAndSellerFees','couponQuantityEligibilityAtCheckout']};
    const schema=buildPoizonSchema({payload,mode:'live',observedAt:payload.observedAt}),row=schema.rows.find(r=>r.sourceOptionMatched);
    return {payload,best:schema.purchaseMatchesSourceQuote?row?.margins.cn.marginAmount:null};
   }).filter(x=>x.best>0).sort((a,b)=>b.best-a.best||a.payload.request.option.localeCompare(b.payload.request.option));

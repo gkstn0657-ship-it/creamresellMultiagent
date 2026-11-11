@@ -22,7 +22,7 @@ let snapshot=null,startBusy=false,startMessage='';
 function renderStart(data){
  const button=el('start-button');if(!button)return;
  const running=data.workerAlive&&['discovering','judging','recovering'].includes(data.status);
- button.disabled=startBusy||!data.workId||running;
+ button.disabled=startBusy||!data.workId||running||data.status==='complete'||data.scopeMode==='inspected-sources';
  button.textContent=startBusy?'시작 요청 중':running?'탐색 진행 중':data.status==='waiting'?'지금 다시 시도':'탐색 시작';
  const feedback=el('start-feedback');feedback.textContent=startMessage||(!data.workId?'시작할 작업이 없습니다.':running?'저장된 인기 순위에서 탐색 중입니다.':'저장된 작업을 이어서 실행합니다.');
  feedback.classList.toggle('error',/연결|실패|오류/.test(startMessage));
@@ -68,17 +68,20 @@ function renderSkipped(data){
  }
 }
 function render(data){
+ const health=el('health-monitor-detail');
+ if(health){const m=data.healthMonitor;health.textContent=!m?'AI 감시: 실행 전':!m.active?'AI 감시: 종료 또는 연결 확인 필요':m.ai?.status==='running'?`AI 감시: 이상 진단 중 · ${m.reason}`:m.status==='healthy'?'AI 감시: 정상 · 10초 주기 점검':`AI 감시: ${m.reason}${m.ai?.status==='complete'?' · '+m.ai.summary:''}`;}
  snapshot=data;renderStart(data);const active=data.workerAlive&&['discovering','judging','recovering'].includes(data.status);
  const waiting=data.status==='waiting',offline=data.status==='offline'||data.status==='stopped';
  el('connection').classList.toggle('offline',!data.workerAlive);
  el('connection').lastChild.textContent=data.workerAlive?'작업 기록 연결됨':'실행기 연결 끊김';
  set('checked',format(data.checked));set('qualified',format(data.qualified));set('judged',format(data.judged));set('reviewed',format(data.reviewed));
- set('target-caption',data.continuous?'계속 탐색 · 최초 목표 '+format(data.initialTarget)+'개':'목표 '+format(data.initialTarget)+'개');
+ set('target-caption',data.brandPlan?`${data.brandPlan.brands.length}개 브랜드 · 신규 ${format(data.initialTarget)}개 · 이전 확인 ${format(data.brandPlan.previouslyChecked)}개`:data.scopeMode==='inspected-sources'?'상품 '+format(data.initialTarget)+'개 확인 후 종료':data.continuous?'계속 탐색 · 최초 목표 '+format(data.initialTarget)+'개':'목표 '+format(data.initialTarget)+'개');
  el('hero-panel').dataset.state=waiting?'waiting':offline?'offline':'active';
  el('live-pill').className=`live-pill ${waiting?'waiting':offline?'offline':''}`;
  set('live-pill',waiting?`● ${data.monitor?.code||''} 자동 재시도 대기`:offline?'● 실행 중단':active?'● 실제 작업 진행 중':'● 상태 확인 중');
  set('orb-symbol',waiting?'Ⅱ':offline?'×':data.status==='judging'?'◇':'✦');
  if(waiting){set('activity-kicker','PAUSED · RETRY SCHEDULED');set('activity-title','탐색이 잠시 멈췄어요');set('activity-detail',reasonText[data.waitReason]||`오류: ${data.waitReason||'연결 확인 필요'}`);set('activity-meta','저장된 상품 위치와 판단 결과는 그대로 보존됩니다.');}
+ else if(data.status==='complete'){set('activity-kicker','COMPLETE');set('activity-title','요청한 상품 확인을 마쳤어요');set('activity-detail',`${format(data.checked)}개 확인 · ${format(data.qualified)}개 검토 통과`);set('activity-meta','결과가 저장되었습니다.');set('live-pill','● 작업 완료');}
  else if(offline){set('activity-kicker','WORKER OFFLINE');set('activity-title','실행기가 작동하지 않아요');set('activity-detail',data.error||'작업 연결을 확인해 주세요.');set('activity-meta','마지막으로 저장한 결과를 표시하고 있습니다.');}
  else if(data.status==='judging'){set('activity-kicker','AGENT REVIEW');set('activity-title','AI가 상품을 검토하고 있어요');set('activity-detail','상품별 수익성 판단과 독립 검토 결과를 기다리고 있습니다.');set('activity-meta',`현재 배치 ${data.lastBatch.judged}/${data.lastBatch.productCount}개 판단`);}
  else if(data.status==='recovering'){set('activity-kicker','SOURCE RECOVERY');set('activity-title','조회 요청을 다시 확인하고 있어요');set('activity-detail',reasonText[data.error]||'연결 및 요청 상태를 확인합니다.');set('activity-meta','상품 조회 실패는 기록 후 다음 상품으로 넘어갑니다.');}
@@ -92,7 +95,7 @@ function render(data){
  set('owner-detail',data.status==='judging'?'상품별 판단 진행 중':`${format(data.judged)}건 판단 완료`);
  set('reviewer-detail',data.status==='judging'?'검토 단계 진행 중':`${format(data.reviewed)}건 독립 검토 완료`);
  set('pipeline-note',waiting?'현재 탐색은 일시 중단됐습니다. 아래 최근 판단은 이전에 완료된 기록입니다.':'통과는 재고·마진·판매 근거와 독립 검토를 모두 확인한 상품만 셉니다.');
- set('rank',data.current.rank?`#${data.current.rank}`:'—');set('category',data.current.category||'—');
+ set('rank',data.current.rank?`#${data.current.rank}`:'—');set('category',data.brandPlan?data.current.brand:data.current.category||'—');
  set('current-product',data.current.name||'현재 상품 기록이 없습니다.');set('current-id',data.current.sourceId?`무신사 상품 #${data.current.sourceId}`:'저장된 위치에서 이어집니다');
  renderResults(data);renderEvents(data);renderSkipped(data);tickClock();
 }

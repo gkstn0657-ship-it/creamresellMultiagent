@@ -1,3 +1,4 @@
+import {diagnosePoizonSearch,projectValidationFailure} from './poizon-diagnostics.mjs';
 import {projectHistory,projectMarginSettings,projectDisplayedSchema} from './schema-data.mjs';
 import {validRankingRequest,projectRankingSettings,projectRankingProducts} from './ranking-data.mjs';
 import {POIZON_COMMANDS,validPoizonRequest,projectPoizon} from './poizon-data.mjs';
@@ -49,7 +50,7 @@ function safeTree(value, depth = 0) {
 }
 export function projectData(cmd, data, payload = {}) {
   if (!data || typeof data !== 'object') throw Error('NO1_INVALID_RESPONSE');
-  if(cmd==='connector:session-status')return {...Object.fromEntries(['tabCount','mainTabCount','inspectedTabCount','authenticatedTabCount','distinctSessionCount'].map(k=>[k,numberOrNull(data[k])])),error:data.error?safeCode(data.error):null};
+  if(cmd==='connector:session-status')return {...Object.fromEntries(['tabCount','mainTabCount','inspectedTabCount','authenticatedTabCount','distinctSessionCount'].map(k=>[k,numberOrNull(data[k])])),error:data.error?safeCode(data.error):null,...(data.lastValidationFailure!==undefined?{lastValidationFailure:projectValidationFailure(data.lastValidationFailure)}:{})};
   if(POIZON_COMMANDS.includes(cmd))return projectPoizon(cmd,data,payload);
   if(cmd==='musinsa:ranking:settings')return projectRankingSettings(data);
   if(cmd==='musinsa:ranking:products')return projectRankingProducts(data);
@@ -144,7 +145,7 @@ export function validateProjectedData(cmd, data, payload = {}) {
 
 // Runs in the extension worker. The No1 token is sent only to the official relay.
 // It is never part of the result and must never be logged or persisted.
-export function relayRequest({cmd, payload = {}, token, Socket = WebSocket, timeoutMs = 20000, traceId = crypto.randomUUID(),signal}) {
+export function relayRequest({cmd, payload = {}, token, Socket = WebSocket, timeoutMs = 20000, traceId = crypto.randomUUID(),signal,onValidationFailure}) {
   validateCommand(cmd, payload);
   if (typeof token !== 'string' || !token || token.length > 16384 || /\s/.test(token)) return Promise.reject(Error('NO1_AUTH_REQUIRED'));
   const url = new URL(RELAY_URL);
@@ -197,7 +198,12 @@ export function relayRequest({cmd, payload = {}, token, Socket = WebSocket, time
         const value=message.data?.taskId;if(!['string','number'].includes(typeof value)||String(value).length>300){finish('NO1_INVALID_RESPONSE');return;}
         taskId=value;for(const p of buffered.splice(0))push(p);return;
       }
-      try { finish(null, projectData(cmd, message.data, payload)); } catch (error) { finish(error.message); }
+      try { finish(null, projectData(cmd, message.data, payload)); } catch (error) {
+        if(cmd==='market:poizon:search'&&error.message==='NO1_INVALID_RESPONSE'){
+          try { const saved=onValidationFailure?.({command:cmd,capturedAt:new Date().toISOString(),...diagnosePoizonSearch(message.data)});saved?.catch?.(()=>{}); } catch {}
+        }
+        finish(error.message);
+      }
     });
     socket.addEventListener('error', () => finish('NO1_RELAY_CONNECTION_FAILED'));
     socket.addEventListener('close', event => finish([4001, 4003].includes(event.code) ? 'NO1_AUTH_REQUIRED' : 'NO1_RELAY_CLOSED'));

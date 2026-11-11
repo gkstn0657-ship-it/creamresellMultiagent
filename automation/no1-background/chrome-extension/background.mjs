@@ -3,6 +3,7 @@ import {readDisplayedTable,readSavedMarginSettings} from './schema-data.mjs';
 import {readRankingSettings} from './ranking-data.mjs';
 import {createConnectionLoop} from './connection-loop.mjs';
 import {readPoizonMarginSettings,readPoizonDisplayedTable} from './poizon-data.mjs';
+import {projectValidationFailure} from './poizon-diagnostics.mjs';
 const BASE = 'http://127.0.0.1:8871';
 
 async function localRequest(key, route, body, signal) {
@@ -64,10 +65,11 @@ async function pageSchema(cmd,payload,tabIds,signal){
 async function executeJob(job,signal){
       if(job.cmd==='connector:session-status'){
         let error=null;try{await existingWebToken();}catch(e){error=safeCode(e.message);}
-        return {...(await chrome.storage.local.get('sessionDiagnostics')).sessionDiagnostics,error};
+        const diagnostics=await chrome.storage.local.get(['sessionDiagnostics','lastValidationFailure']);
+        return {...diagnostics.sessionDiagnostics,error,lastValidationFailure:projectValidationFailure(diagnostics.lastValidationFailure)};
       }
       const check=()=>{if(signal.aborted)throw Error('NO1_RELAY_CLOSED');if(job.deadline-Date.now()<=1000)throw Error('NO1_BRIDGE_TIMEOUT');};
-      const relay=(cmd,payload={},max=20000)=>{check();return relayRequest({cmd,payload,token,signal,timeoutMs:Math.min(max,job.deadline-Date.now()-1000)});};
+      const relay=(cmd,payload={},max=20000)=>{check();return relayRequest({cmd,payload,token,signal,onValidationFailure:diagnostic=>chrome.storage.local.set({lastValidationFailure:diagnostic}),timeoutMs:Math.min(max,job.deadline-Date.now()-1000)});};
       check();
       validateCommand(job.cmd, job.payload);
       const {token,tabIds} = await existingWebToken();

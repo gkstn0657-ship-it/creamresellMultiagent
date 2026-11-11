@@ -1,5 +1,6 @@
 import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';
 import {writeJsonAtomic} from './atomic-json.mjs';
+import {validateBrandPlan} from './brand-ranking-plan.mjs';
 const read=file=>fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):null;
 const alive=pid=>{if(!Number.isSafeInteger(pid)||pid<1)return false;try{process.kill(pid,0);return true;}catch{return false;}};
 const orderDir=root=>path.join(root,'work-orders');
@@ -16,11 +17,12 @@ export function workSummary(root,work){
  const reserved=entries.reduce((n,e)=>n+e.productCount,0),activeRunIds=entries.filter(e=>e.workerAlive&&!['complete','stopped','needs_attention','prefetching','prefetched'].includes(e.status)).map(e=>e.runId);
  const qualifiedProductIds=[...new Set(entries.flatMap(e=>e.qualifiedProductIds))];
  const profitTarget=work.scopeMode==='profitable-results';
- const remainingToInitialTarget=Math.max(0,profitTarget?work.targetProfitableProducts-qualifiedProductIds.length:work.targetProducts-reserved);
+ const sourceTarget=work.scopeMode==='inspected-sources',sourceProgress=sourceTarget?explorationState(root,work.id):null;
+ const remainingToInitialTarget=Math.max(0,sourceTarget?work.targetSources-(sourceProgress?.checkedSources||0):profitTarget?work.targetProfitableProducts-qualifiedProductIds.length:work.targetProducts-reserved);
  const remaining=work.continuous===true?workPolicy.maxBatchProducts:remainingToInitialTarget;
  const exploration=explorationState(root,work.id);
  const status=work.status==='stopped'?'stopped':activeRunIds.length||exploration?.workerAlive?'running':['needs_attention','source_exhausted'].includes(exploration?.status)?exploration.status:remaining?'ready':entries.every(e=>e.status==='complete')?'complete':'needs_attention';
- return {workId:work.id,status,continuous:work.continuous===true,...(profitTarget?{scopeMode:work.scopeMode,targetProfitableProducts:work.targetProfitableProducts,profitableProductsFound:qualifiedProductIds.length,qualifiedProductIds}:{}),targetProducts:work.targetProducts,reservedProducts:reserved,remainingProducts:remaining,remainingToInitialTarget,judgedProducts:entries.reduce((n,e)=>n+e.judged,0),activeRunIds,entries,exploration,createdAt:work.createdAt,userInstruction:work.userInstruction,policy:workPolicy};
+ return {workId:work.id,status,continuous:work.continuous===true,...(sourceTarget?{scopeMode:work.scopeMode,targetSources:work.targetSources,checkedSources:sourceProgress?.checkedSources||0}:{}),...(profitTarget?{scopeMode:work.scopeMode,targetProfitableProducts:work.targetProfitableProducts,profitableProductsFound:qualifiedProductIds.length,qualifiedProductIds}:{}),targetProducts:work.targetProducts,reservedProducts:reserved,remainingProducts:remaining,remainingToInitialTarget,judgedProducts:entries.reduce((n,e)=>n+e.judged,0),activeRunIds,entries,exploration,createdAt:work.createdAt,userInstruction:work.userInstruction,policy:workPolicy};
 }
 export function continueWorkUntilStopped(root,workId){
  const work=workOrders(root).find(w=>w.id===workId);
@@ -40,7 +42,11 @@ export async function withWorkLock(root,fn){
  if(fd===undefined)throw Error('WORK_CONTROL_BUSY');fs.writeFileSync(fd,String(process.pid));fs.closeSync(fd);
  try{return await fn();}finally{if(fs.existsSync(file)&&fs.readFileSync(file,'utf8')===String(process.pid))fs.unlinkSync(file);}
 }
-export function startWork(root,{targetProducts,targetProfitableProducts,userInstruction,requestId}){
+export function startWork(root,{targetProducts,targetProfitableProducts,targetSources,sourcePlan,userInstruction,requestId}){
+ if(sourcePlan&&(validateBrandPlan(sourcePlan).products.length!==targetSources))throw Error('BRAND_SCOPE_MISMATCH');
+ const sourceTarget=targetSources!==undefined;
+ if(sourceTarget&&(targetProducts!==undefined||targetProfitableProducts!==undefined))throw Error('AMBIGUOUS_WORK_SCOPE');
+ if(sourceTarget)targetProducts=targetSources;
  const profitTarget=targetProfitableProducts!==undefined;
  if(profitTarget&&targetProducts!==undefined)throw Error('AMBIGUOUS_WORK_SCOPE');
  const target=profitTarget?targetProfitableProducts:targetProducts;
@@ -49,9 +55,10 @@ export function startWork(root,{targetProducts,targetProfitableProducts,userInst
  if(typeof requestId!=='string'||!requestId.trim()||requestId.length>160)throw Error('WORK_REQUEST_ID_REQUIRED');
  const hex=crypto.createHash('sha256').update(requestId).digest('hex').slice(0,32),id='work-'+hex.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5');
  const file=path.join(orderDir(root),id+'.json'),old=read(file);
- if(old){if((profitTarget?old.scopeMode!=='profitable-results'||old.targetProfitableProducts!==targetProfitableProducts:old.scopeMode==='profitable-results'||old.targetProducts!==targetProducts)||old.userInstruction!==userInstruction)throw Error('WORK_REQUEST_SCOPE_CONFLICT');return {...workSummary(root,old),reused:true};}
+ if(old&&JSON.stringify(old.sourcePlan)!==JSON.stringify(sourcePlan))throw Error('WORK_REQUEST_SCOPE_CONFLICT');
+ if(old){if(sourceTarget!==(old.scopeMode==='inspected-sources')||(profitTarget?old.scopeMode!=='profitable-results'||old.targetProfitableProducts!==targetProfitableProducts:old.scopeMode==='profitable-results'||old.targetProducts!==targetProducts)||old.userInstruction!==userInstruction)throw Error('WORK_REQUEST_SCOPE_CONFLICT');return {...workSummary(root,old),reused:true};}
  if(currentWork(root))throw Error('WORK_SCOPE_ALREADY_ACTIVE: finish or explicitly stop it before opening another');
- const work={id,status:'open',targetProducts:profitTarget?null:targetProducts,...(profitTarget?{scopeMode:'profitable-results',targetProfitableProducts,source:'no1-musinsa-ranking'}:{}),userInstruction,requestId,createdAt:new Date().toISOString(),entries:[]};writeJsonAtomic(file,work);return workSummary(root,work);
+ const work={id,status:'open',targetProducts:profitTarget?null:targetProducts,...(sourceTarget?{scopeMode:'inspected-sources',targetSources,source:sourcePlan?.source||'no1-musinsa-ranking',...(sourcePlan?{sourcePlan}:{})}:profitTarget?{scopeMode:'profitable-results',targetProfitableProducts,source:'no1-musinsa-ranking'}:{}),userInstruction,requestId,createdAt:new Date().toISOString(),entries:[]};writeJsonAtomic(file,work);return workSummary(root,work);
 }
 export function reserveWork(root,{workId,runId,productCount,triggerEventId=null,requestId=null,scopeHash=null,prefetchAfterRunId=null}){
  const orders=workOrders(root),reserved=orders.find(w=>w.entries.some(e=>e.runId===runId));
@@ -62,7 +69,8 @@ export function reserveWork(root,{workId,runId,productCount,triggerEventId=null,
  const prefetchAllowed=prefetchAfterRunId&&work.entries.some(e=>e.runId===prefetchAfterRunId)&&read(path.join(root,prefetchAfterRunId,'batch-state.json'))?.status==='judging'&&read(path.join(root,prefetchAfterRunId,'launch.json'))?.managedBy==='deterministic-exploration'&&read(path.join(root,prefetchAfterRunId,'process.json'))?.pid===process.pid&&!summary.entries.some(e=>['prefetching','prefetched'].includes(e.status));
  if(prefetchAfterRunId&&!prefetchAllowed)throw Error('PREFETCH_SCOPE_INVALID');
  if(summary.activeRunIds.some(id=>!prefetchAllowed||id!==prefetchAfterRunId))throw Error('ACTIVE_BATCH_EXISTS: '+summary.activeRunIds.join(','));
- if(productCount>summary.remainingProducts)throw Error('WORK_PRODUCT_LIMIT: remaining '+summary.remainingProducts);
+ const reservationRemaining=work.scopeMode==='inspected-sources'?work.targetSources-summary.reservedProducts:summary.remainingProducts;
+ if(productCount>reservationRemaining)throw Error('WORK_PRODUCT_LIMIT: remaining '+reservationRemaining);
  if(orders.some(w=>workSummary(root,w).activeRunIds.some(id=>!prefetchAllowed||w.id!==work.id||id!==prefetchAfterRunId)))throw Error('ACTIVE_BATCH_EXISTS');
  if(triggerEventId&&orders.some(w=>w.entries.some(e=>e.triggerEventId===triggerEventId)))throw Error('EVENT_FOLLOWUP_ALREADY_STARTED');
  work.entries.push({runId,productCount,triggerEventId,requestId,scopeHash,at:new Date().toISOString()});writeJsonAtomic(path.join(orderDir(root),work.id+'.json'),work);return work.id;

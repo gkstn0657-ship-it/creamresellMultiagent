@@ -73,7 +73,7 @@ export async function collectKreamCandidate(candidate,{client,onEvidence=()=>{},
     payload.identity.marketBinding='exact model code from No1 KREAM search matched to merchant maker model; source option bound separately';
     payload.marketIdentityEvidence={source:'no1-kream-model-search',market:match.item,sourceModel:stock.makerNumber,sourceProductId:candidate.productId,listingSelection:'exact model; highest historical totalSales, then product ID; not a 30-day demand claim',alternativeListingIds:alternatives.map(m=>m.item.productCode)};
     payload.missingFields=payload.missingFields.filter(x=>x!=='marketModelIndependentEvidence');
-    payload.rankingSource={...candidate,source:'no1-musinsa-ranking'};
+    payload.rankingSource={...candidate,source:candidate.source||'no1-musinsa-ranking'};
     offers.push(item.seed);observations.push({kind:'no1_product',mode:'live',observedAt:payload.observedAt,payload});
   }
   return {status:'collected',kreamId:id,packet:validatePacket(makePacket({productId:id,offers},observations))};
