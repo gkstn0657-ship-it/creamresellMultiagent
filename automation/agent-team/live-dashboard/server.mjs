@@ -60,7 +60,7 @@ export function liveDashboardData(root=defaultRoot,workId){
  const status=work.status==='stopped'||state.status==='stopped'?'stopped':state.status==='complete'?'complete':!workerAlive?'offline':monitorFresh&&monitor.severity==='error'?'waiting':state.status==='waiting_for_retry'?'waiting':state.status==='recovering'?'recovering':state.status==='running_batch'?'judging':state.status==='discovering'?'discovering':state.status||'starting';
  return {
   version:1,observedAt:new Date().toISOString(),workId:work.id,status,workerAlive,continuous:work.continuous===true,
-  checked:state.checkedSources||0,qualified:state.profitableProductsFound||0,initialTarget:work.targetSources||work.targetProfitableProducts||null,scopeMode:work.scopeMode||null,
+  checked:state.checkedSources||0,qualified:state.profitableProductsFound||0,initialTarget:work.targetSources||work.targetProfitableProducts||work.targetProducts||null,scopeMode:work.scopeMode||null,
   lookupSkippedCount:lookupSkipped.length,lookupSkipped:lookupSkipped.slice(0,50),
   judged,reviewed,adopted,held,excluded,pendingPackets:state.pendingSourceIds?.length||0,retrySources:state.retrySources?.length||0,
   brandPlan:state.brandPlan||null,
