@@ -101,6 +101,7 @@ test('runner continues after held products until target successes, keeping separ
   const result=await runMusinsaProfitSearch({root,workId:w.workId,client,collect:async s=>{calls.push(s.productId);return {status:'collected',kreamId:s.productId,packet:packet(s.productId)};},execute:async({seeds})=>({status:'complete',judged:seeds.length,results:seeds.map(s=>({...adopted(s.kreamId),...(s.kreamId==='1'?{assessment:{decision:'hold',reviewId:'r'}}:{})}))})});
   assert.equal(result.status,'complete');assert.equal(result.profitableProductsFound,2);assert.deepEqual(calls,['1','2','3']);
   const summary=workSummary(root,workOrders(root)[0]);assert.equal(summary.reservedProducts,3);assert.equal(summary.profitableProductsFound,2);assert.equal(summary.remainingProducts,0);
+  const registry=JSON.parse(fs.readFileSync(path.join(root,'qualified-products.json'),'utf8'));assert.equal(registry.total,2);assert.deepEqual(registry.products.map(product=>product.canonicalProductId),['2','3']);
   assert.equal(fs.existsSync(path.join(root,'discovery','discovery.sqlite')),false);
   const memory=JSON.parse(fs.readFileSync(path.join(root,'musinsa-discovery','state.json'),'utf8'));assert.deepEqual(memory.seenSourceIds,['1','2','3']);
 });

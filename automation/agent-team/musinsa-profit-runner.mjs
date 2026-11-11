@@ -9,6 +9,7 @@ import {recoveringClient,isProductLookupFailure} from './source-recovery.mjs';
 import {classifyError} from './error-catalog.mjs';
 import {offerMarketKey} from './market-offer.mjs';
 import {validateBrandPlan} from './brand-ranking-plan.mjs';
+import {syncQualifiedProducts} from './qualified-products.mjs';
 const read=p=>fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):null;
 const idFor=(work,n)=>'batch-'+crypto.createHash('sha256').update(`musinsa-profit:${work}:${n}`).digest('hex').slice(0,32).replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5');
 export async function runMusinsaProfitSearch({root,workId,client=new BackgroundClient(),collect=collectRankingCandidate,execute=runBatch,onEvent=()=>{},recovery={}}){
@@ -25,6 +26,7 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
   const stop=()=>fs.existsSync(path.join(dir,'STOP'))||workOrders(root).find(w=>w.id===workId)?.status==='stopped';
   const save=()=>{state.pendingSourceIds=pending.map(p=>p.offers[0].productUrl.split('/').at(-1));state.updatedAt=new Date().toISOString();write(path.join(dir,'state.json'),state);write(path.join(sourceDir,'state.json'),memory);};
   const emit=e=>{onEvent(e);save();};
+  const syncQualified=()=>{try{const registry=syncQualifiedProducts(root);state.qualifiedProducts={total:registry.total,updatedAt:registry.updatedAt};delete state.qualifiedProductsError;}catch(error){state.qualifiedProductsError=String(error.message).slice(0,160);}};
   let pending=(state.pendingSourceIds||[]).map(id=>read(path.join(sourceDir,'evidence',id,'packet.json')));
   if(pending.some(p=>!p))throw Error('PENDING_PACKET_MISSING');
   client=recoveringClient(client,{lookupDelays:work.continuous?[1000]:null,...recovery,stopped:stop,onRecovery:e=>{
@@ -83,6 +85,7 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
       const result=await execute({dir:batchDir,seeds,concurrency:2,analysisProfile:'musinsa-ranking',mode:'live',resume:fs.existsSync(path.join(batchDir,'collection-complete.json')),collect:async seed=>{const p=payloads.get(JSON.stringify(seed));if(!p)throw Error('MUSINSA_PACKET_MISSING');return structuredClone(p);},onEvent:e=>onEvent({...e,runId:id})});
       for(const row of result.results)row.qualification=qualifyRankingResult(row,packets.find(p=>p.productId===row.productId));
       write(path.join(batchDir,'batch-state.json'),result);write(path.join(batchDir,'batch-result.json'),result);
+      syncQualified();
       if(result.status==='complete')pending=[];
       state.batches.push({runId:id,status:result.status,qualified:result.results.filter(r=>r.qualification.passed).map(r=>r.productId)});updateProgress();emit({type:'profit_progress',found:state.profitableProductsFound,target:work.targetProfitableProducts,checkedSources:state.checkedSources});
       if(result.status!=='complete')throw Error('BATCH_NEEDS_ATTENTION');
@@ -139,7 +142,7 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
       state.failureEventRunId=id;emit({type:'work_needs_attention',workId,error:state.error,failureEventRunId:id});
     }
   }
-  finally{state.finishedAt=new Date().toISOString();save();if(fs.existsSync(lock)&&fs.readFileSync(lock,'utf8')===String(process.pid))fs.unlinkSync(lock);}
+  finally{syncQualified();state.finishedAt=new Date().toISOString();save();if(fs.existsSync(lock)&&fs.readFileSync(lock,'utf8')===String(process.pid))fs.unlinkSync(lock);}
   return state;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href){
