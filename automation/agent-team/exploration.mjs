@@ -53,8 +53,11 @@ export async function runExploration({root,workId,feed,executeBatch=runBatch,mod
  const startPrefetch=currentId=>{
   if(!prefetchBatch||prefetch||stop())return;
   prefetch=(async()=>{
-   const work=workOrders(root).find(w=>w.id===workId),remaining=workSummary(root,work).remainingProducts;
-   if(!remaining)return null;
+   const work=workOrders(root).find(w=>w.id===workId),summary=workSummary(root,work),remaining=summary.remainingProducts;
+   // An interrupted run may already have the next batch fully prefetched. Do not
+   // reserve a second lookahead while the failed current batch is being resumed;
+   // the main loop will consume the saved prefetch after the current batch ends.
+   if(!remaining||summary.entries.some(e=>e.runId!==currentId&&['prefetching','prefetched'].includes(e.status)))return null;
    const id=batchId(workId,work.entries.length),batchDir=path.join(root,id);
    const seeds=await selectNext(store,id,Math.min(5,remaining),{feed,stopped:()=>stop()||abortPrefetch});
    if(stop()||abortPrefetch)return null;

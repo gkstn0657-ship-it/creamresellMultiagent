@@ -24,3 +24,13 @@ test('prefetch failure preserves the completed first batch and resumes without q
  const first=await run();assert.equal(first.status,'needs_attention');assert.equal(scopeStatus(root).judgedProducts,5);assert.equal(scopeStatus(root).reservedProducts,7);
  fail=false;assert.equal((await run()).status,'complete');assert.equal(scopeStatus(root).reservedProducts,7);assert.equal(scopeStatus(root).entries.length,2);
 });
+test('batch failure with a saved prefetch resumes without creating a competing lookahead',async()=>{
+ const {root,workId}=fixture(7);let fail=true;
+ const collectDiscovered=async c=>packet(c);
+ const run=()=>runExploration({root,workId,mode:'fixture',prefetchBatch:args=>prepareBatch({...args,collectDiscovered}),executeBatch:args=>runBatch({...args,collectDiscovered,analyze:async({packet:p})=>{
+  if(fail&&p.productId==='1')return {status:'needs_attention'};
+  return {status:'complete',assessment:{decision:'hold'}};
+ }})});
+ const first=await run();assert.equal(first.status,'needs_attention');assert.equal(scopeStatus(root).reservedProducts,7);assert.equal(scopeStatus(root).entries.at(-1).status,'prefetched');
+ fail=false;const resumed=await run();assert.equal(resumed.status,'complete');assert.equal(scopeStatus(root).reservedProducts,7);assert.equal(scopeStatus(root).judgedProducts,7);assert.equal(scopeStatus(root).entries.length,2);
+});
