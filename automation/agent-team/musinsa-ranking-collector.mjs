@@ -1,6 +1,7 @@
 import {probeProduct} from '../no1-background/product-probe.mjs';
 import {matchMarketSize,sizeKey} from '../no1-background/size-binding.mjs';
 import {buildMarketSchema} from './market-schema.mjs';
+import {channelTrades,tradesForSize,tradePriceCheck,modeHasTradeEvidence} from './trade-channels.mjs';
 import {sameColor} from './discovery-collector.mjs';
 import {makePacket,validatePacket} from './packets.mjs';
 import {collectPoizonCandidate} from './poizon-ranking-collector.mjs';
@@ -118,7 +119,15 @@ export function qualifyRankingResult(result,packet){
     const p=o.payload;if(!p.identity?.marketModelIndependentlyVerified||p.stock?.selectedOption?.isAvailable===false)continue;
     const schema=buildMarketSchema(o);
     if(!schema.purchaseMatchesSourceQuote||schema.platform==='poizon'&&(schema.bidStatus===0||schema.cannotBidMessage))continue;
-    for(const row of schema.rows)if(row.sourceOptionMatched&&row.stockQuantity>0&&row.salesStatus==='ok'&&row.expectedSales30d>0&&Object.entries(row.margins).some(([mode,m])=>mode!=='desired'&&m.marginAmount>0&&m.marginRate>0))eligible.push({platform:schema.platform||'kream',marketProductId:p.request.poizonId||p.request.kreamId,size:row.size,sourceOption:p.request.option,stock:row.stockQuantity,expectedSales30d:row.expectedSales30d});
+    for(const row of schema.rows){
+      if(!(row.sourceOptionMatched&&row.stockQuantity>0&&row.salesStatus==='ok'&&row.expectedSales30d>0))continue;
+      const base={platform:schema.platform||'kream',marketProductId:p.request.poizonId||p.request.kreamId,size:row.size,sourceOption:p.request.option,stock:row.stockQuantity,expectedSales30d:row.expectedSales30d};
+      if(schema.platform==='poizon'){if(Object.entries(row.margins).some(([mode,m])=>mode!=='desired'&&m.marginAmount>0&&m.marginRate>0))eligible.push(base);continue;}
+      // KREAM: a fast/normal ask-price margin needs same-channel trades (⚡ storage vs normal) that keep the margin positive at their median.
+      const channels=channelTrades(tradesForSize(p.marketResearch||{},row.size),row.size);
+      const modes=Object.entries(row.margins).flatMap(([mode,m])=>{const check=tradePriceCheck(mode,m,channels,schema.inputs);return modeHasTradeEvidence(mode,m,check)?[{mode,askPrice:m.salePrice,askMargin:m.marginAmount,...(check?{channel:check.channel,channelTrades30d:check.count30d,channelMedian30d:check.median30d,marginAtChannelMedian:check.marginAtMedian}:{})}]:[];});
+      if(modes.length)eligible.push({...base,saleModes:modes});
+    }
   }
   checks.matchedStockMarginSales=eligible.length>0;
   return {passed:Object.values(checks).every(Boolean),checks,canonicalProductId:packet.observations.find(o=>o.kind==='no1_product')?.payload.canonicalProductId||packet.productId,eligibleOptions:eligible,purchaseAuthorized:false};
