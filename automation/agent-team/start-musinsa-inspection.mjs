@@ -16,7 +16,7 @@ export async function startMusinsaInspection(root,args){
   if(fs.existsSync(path.join(dir,'STOP')))throw Error('USER_WORK_SCOPE_REQUIRED');
   if(!fs.existsSync(path.join(dir,'state.json')))write(path.join(dir,'state.json'),{workId:summary.workId,status:'starting',mode:'live',source:'no1-musinsa-ranking',targetSources:summary.targetSources,runtimeDiscoveryAI:false,checkedSources:0,skipped:[],batches:[],startedAt:new Date().toISOString()});
   const fd=fs.openSync(path.join(dir,'continuous.log'),'a');let child;
-  try{child=spawn(process.execPath,[fileURLToPath(new URL('./musinsa-profit-runner.mjs',import.meta.url)),`--root=${root}`,`--work=${summary.workId}`],{windowsHide:true,detached:true,stdio:['ignore',fd,fd]});await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});}finally{fs.closeSync(fd);}
+  try{child=spawn(process.execPath,[fileURLToPath(new URL('./musinsa-continuous.mjs',import.meta.url)),`--root=${root}`,`--work=${summary.workId}`],{windowsHide:true,detached:true,stdio:['ignore',fd,fd]});await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});}finally{fs.closeSync(fd);}
   child.unref();write(path.join(dir,'process.json'),{pid:child.pid,at:new Date().toISOString()});
   return {...summary,launched:true,pid:child.pid};
  });

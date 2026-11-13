@@ -7,6 +7,8 @@ const live=pid=>{try{if(!Number.isSafeInteger(pid)||pid<1)return false;process.k
 const here=path.dirname(fileURLToPath(import.meta.url));
 export function classifyWatchdog({work,state,workerAlive,bridge,bridgeError,now=Date.now()}){
  if(work?.status==='stopped')return {status:'stopped',reason:'USER_STOPPED',severity:'none'};
+ // A finite scope that reached its target or exhausted the ranking ended normally.
+ if(!workerAlive&&work?.continuous!==true&&['complete','source_exhausted'].includes(state?.status))return {status:'finished',reason:state.status,severity:'none'};
  if(!workerAlive)return {status:'worker_stopped',reason:'WORKER_NOT_RUNNING',severity:'error'};
  if(bridgeError||!bridge)return {status:'bridge_unavailable',reason:'NO1_BRIDGE_UNAVAILABLE',severity:'error'};
  if(bridge.browserConnected!==true)return {status:'connector_disconnected',reason:'NO1_BRIDGE_DISCONNECTED',severity:'error'};
@@ -26,8 +28,9 @@ export function classifyRemoteBridge(remote,now=Date.now()){
 export async function pollWatchdog({root,workId,client=new BackgroundClient(),restart=async()=>control('cream_musinsa_work_continue',{workId},{root}),restartBridge=restartLocalBridge,notify=nativeNotify,now=Date.now,remoteBridgeStatus=undefined}={}){
  const dir=path.join(root,'explorations',workId),file=path.join(dir,'monitor.json');fs.mkdirSync(dir,{recursive:true});
  const previous=read(file),work=read(path.join(root,'work-orders',workId+'.json')),state=read(path.join(dir,'state.json'))||{};
- const pid=Number((()=>{try{return fs.readFileSync(path.join(dir,'continuous.lock'),'utf8');}catch{return 0;}})());
- const workerAlive=live(pid);let bridge=null,bridgeError=null;
+ // Continuous work holds continuous.lock; a finite inspection runner holds only worker.lock.
+ const lockPid=name=>Number((()=>{try{return fs.readFileSync(path.join(dir,name),'utf8');}catch{return 0;}})());
+ const workerAlive=live(lockPid('continuous.lock'))||live(lockPid('worker.lock'));let bridge=null,bridgeError=null;
  try{bridge=await client.status();}catch(e){bridgeError=e.message;}
  const finding=classifyWatchdog({work,state,workerAlive,bridge,bridgeError,now:now()});
  const changed=previous?.status!==finding.status||previous?.reason!==finding.reason;

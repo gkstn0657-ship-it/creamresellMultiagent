@@ -29,7 +29,9 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
   const syncQualified=()=>{try{const registry=syncQualifiedProducts(root);state.qualifiedProducts={total:registry.total,updatedAt:registry.updatedAt};delete state.qualifiedProductsError;}catch(error){state.qualifiedProductsError=String(error.message).slice(0,160);}};
   let pending=(state.pendingSourceIds||[]).map(id=>read(path.join(sourceDir,'evidence',id,'packet.json')));
   if(pending.some(p=>!p))throw Error('PENDING_PACKET_MISSING');
-  client=recoveringClient(client,{lookupDelays:work.continuous?[1000]:null,...recovery,stopped:stop,onRecovery:e=>{
+  // As requested on 2026-11-13, finite and continuous Musinsa work both skip a
+  // product-specific lookup failure after one short retry instead of halting.
+  client=recoveringClient(client,{lookupDelays:[1000],...recovery,stopped:stop,onRecovery:e=>{
     state.recovery={...e,errorCode:e.error?classifyError({reason:e.error}).code:null,sourceId:state.currentSource?.productId||null,at:new Date().toISOString()};
     state.status=e.type==='source_retry'?'recovering':e.type==='source_recovered'?'discovering':'needs_attention';emit({...e,sourceId:state.recovery.sourceId,at:state.recovery.at});
   }});
@@ -53,7 +55,7 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
     };
     // A saved lookup with at least two failures already exhausted the new
     // one-retry policy. Preserve evidence and continue after upgrading a run.
-    if(work.continuous&&['source_retry','source_recovery_exhausted'].includes(state.recovery?.type)&&(state.recovery.attempts||state.recovery.attempt)>=2&&state.currentSource?.productId===state.recovery.sourceId&&!seenSources.has(state.currentSource.productId)&&isProductLookupFailure(state.recovery.cmd,state.recovery.error))skipFailedLookup(state.currentSource,state.recovery.error,state.recovery.attempts||state.recovery.attempt);
+    if(['source_retry','source_recovery_exhausted'].includes(state.recovery?.type)&&(state.recovery.attempts||state.recovery.attempt)>=2&&state.currentSource?.productId===state.recovery.sourceId&&!seenSources.has(state.currentSource.productId)&&isProductLookupFailure(state.recovery.cmd,state.recovery.error))skipFailedLookup(state.currentSource,state.recovery.error,state.recovery.attempts||state.recovery.attempt);
     const updateProgress=()=>{const summary=workSummary(root,workOrders(root).find(w=>w.id===workId));state.profitableProductsFound=summary.profitableProductsFound??new Set(summary.entries.flatMap(e=>e.qualifiedProductIds)).size;return summary;};
     const targetReached=()=>sourceTarget?!work.continuous&&state.checkedSources>=work.targetSources:!work.continuous&&updateProgress().remainingProducts===0;
     const flush=async()=>{
@@ -107,7 +109,7 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
         let result;try{
         result=await collect({...source,category,observedAt:new Date().toISOString()},{client,seenKreamIds:seenMarkets,onEvidence:async(cmd,payload,data)=>write(path.join(evidenceDir,`${++evidenceIndex}.json`),{cmd,payload,data,observedAt:new Date().toISOString()})});
         }catch(e){
-          if(work.continuous&&state.recovery?.type==='source_recovery_exhausted'&&state.recovery.sourceId===source.productId&&isProductLookupFailure(state.recovery.cmd,e.message)){
+          if(state.recovery?.type==='source_recovery_exhausted'&&state.recovery.sourceId===source.productId&&isProductLookupFailure(state.recovery.cmd,e.message)){
             skipFailedLookup(source,e.message,state.recovery.attempts);continue;
           }
           // Only an established product-specific mismatch is an exclusion.
@@ -122,7 +124,7 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
         // KREAM product. Deduplicate market IDs only once a packet is queued.
         if(result.status==='collected'){for(const id of result.marketKeys||(result.kreamId?[result.kreamId]:[]))seenMarkets.add(id);memory.seenKreamIds=[...seenMarkets];}
         if(result.status==='collected'){write(path.join(evidenceDir,'packet.json'),result.packet);pending.push(result.packet);}
-        else state.skipped.push({sourceId:source.productId,productName:source.productName||null,kreamId:result.kreamId||null,reason:result.reason,code:classifyError({reason:result.reason}).code,marketChecks:result.marketChecks||null,...(result.lookupFailed?{lookupFailed:true,attempts:work.continuous?2:null,at:new Date().toISOString()}:{})});
+        else state.skipped.push({sourceId:source.productId,productName:source.productName||null,kreamId:result.kreamId||null,reason:result.reason,code:classifyError({reason:result.reason}).code,marketChecks:result.marketChecks||null,...(result.lookupFailed?{lookupFailed:true,attempts:2,at:new Date().toISOString()}:{})});
         emit({type:'source_processed',sourceId:source.productId,rank:source.rank,status:result.status,reason:result.reason,code:result.reason?classifyError({reason:result.reason}).code:200,kreamId:result.kreamId,pending:pending.length});
         if(pending.length>=(sourceTarget?5:Math.min(5,updateProgress().remainingProducts)))await flush();
       }

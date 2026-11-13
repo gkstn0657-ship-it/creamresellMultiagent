@@ -133,3 +133,24 @@ test('continuous source scope resumes after its original checked-source target',
   const result=await runMusinsaProfitSearch({root,workId:w.workId,client,collect:async s=>{calls.push(s.productId);return {status:'skipped',reason:'NO_AVAILABLE_STOCK'};}});
   assert.deepEqual(calls,['2']);assert.equal(result.checkedSources,2);assert.equal(result.status,'source_exhausted');
 });
+
+test('finite source inspection skips a product-specific lookup failure after one short retry and reaches its target',async()=>{
+ const root=temp(),w=startWork(root,{targetSources:2,userInstruction:'inspect 2',requestId:'finite-skip'});
+ const settings={category:'103000',period:'REALTIME',gender:'A',ageBand:'AGE_BAND_ALL'},calls=[],waits=[];
+ const client={request:async(cmd,payload)=>{
+  if(cmd.endsWith('settings'))return settings;
+  if(cmd==='stock:check'){const id=payload.url.split('/').at(-1);calls.push(id);if(id==='1')throw Error('STOCK_CHECK_FAILED');return {};}
+  return {products:[1,2,3].map(n=>({rank:n,productId:String(n),productName:'shoe',brandName:'brand'}))};
+ }};
+ const result=await runMusinsaProfitSearch({root,workId:w.workId,client,recovery:{sleep:async ms=>waits.push(ms)},collect:async(s,{client})=>{await client.request('stock:check',{url:s.productUrl});return {status:'skipped',reason:'NO_AVAILABLE_STOCK'};}});
+ assert.equal(result.status,'complete');assert.deepEqual(calls,['1','1','2']);assert.deepEqual(waits,[1000]);assert.equal(result.checkedSources,2);
+ assert.equal(result.skipped[0].lookupFailed,true);assert.equal(result.skipped[0].attempts,2);assert.equal(result.retrySources.length,0);
+});
+test('finite source inspection still halts on authentication and transport failures',async()=>{
+ for(const code of ['NO1_PLATFORM_LOGIN_REQUIRED','NO1_BRIDGE_DISCONNECTED','NO1_INVALID_RESPONSE']){
+  const root=temp(),w=startWork(root,{targetSources:1,userInstruction:'inspect 1',requestId:code});
+  const client={request:async cmd=>{if(cmd.endsWith('settings'))return {category:'103000',period:'REALTIME',gender:'A',ageBand:'AGE_BAND_ALL'};if(cmd==='stock:check')throw Error(code);return {products:[{rank:1,productId:'1',productName:'shoe',brandName:'brand'}]};}};
+  const result=await runMusinsaProfitSearch({root,workId:w.workId,client,recovery:{sleep:async()=>{}},collect:async(s,{client})=>client.request('stock:check',{url:s.productUrl})});
+  assert.equal(result.status,'needs_attention',code);assert.equal(result.checkedSources,0,code);
+ }
+});

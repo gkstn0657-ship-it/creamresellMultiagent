@@ -14,3 +14,18 @@ test('completed finite source inspection can continue until explicitly stopped',
  let calls=0;const result=await runContinuousMusinsa({root,workId:w.workId,run:async()=>{calls++;return {status:'source_exhausted',settings,checkedSources:4};},intervals:{sourceExhausted:1000},sleep:async()=>fs.writeFileSync(path.join(dir,'STOP'),'user stop')});
  assert.equal(calls,1);assert.equal(result.status,'stopped');assert.equal(JSON.parse(fs.readFileSync(memoryFile,'utf8')).contexts[JSON.stringify(settings)].categoryIndex,0);
 });
+test('finite supervisor waits through an environment failure, then ends at its target without resetting the cycle',async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'cream-finite-supervisor-')),w=startWork(root,{targetSources:3,userInstruction:'inspect three',requestId:'finite-supervised'}),dir=path.join(root,'explorations',w.workId);
+ const settings={category:'103000',period:'REALTIME',gender:'A',ageBand:'AGE_BAND_ALL'},memoryFile=path.join(root,'musinsa-discovery','state.json');fs.mkdirSync(path.dirname(memoryFile),{recursive:true});fs.writeFileSync(memoryFile,JSON.stringify({seenSourceIds:['1'],seenKreamIds:[],contexts:{[JSON.stringify(settings)]:{categoryIndex:2}}}));
+ const results=[{status:'needs_attention',error:'NO1_WEB_TAB_REQUIRED',settings,checkedSources:1},{status:'complete',settings,checkedSources:3}];let calls=0,slept=0;const events=[];
+ const result=await runContinuousMusinsa({root,workId:w.workId,run:async()=>results[calls++],intervals:{otherFailure:3000},sleep:async()=>{slept++;},onEvent:e=>events.push(e)});
+ assert.equal(calls,2);assert.equal(slept,3);assert.equal(result.status,'complete');
+ assert.ok(events.some(e=>e.type==='continuous_wait'&&e.reason==='NO1_WEB_TAB_REQUIRED'));
+ assert.equal(JSON.parse(fs.readFileSync(memoryFile,'utf8')).contexts[JSON.stringify(settings)].categoryIndex,2);
+ assert.equal(fs.existsSync(path.join(dir,'continuous.lock')),false);
+});
+test('finite supervisor reports source exhaustion instead of restarting the ranking cycle',async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'cream-finite-exhausted-')),w=startWork(root,{targetSources:3,userInstruction:'inspect three',requestId:'finite-exhausted'});
+ let calls=0;const result=await runContinuousMusinsa({root,workId:w.workId,run:async()=>{calls++;return {status:'source_exhausted',settings:{},checkedSources:2};},sleep:async()=>assert.fail('must not wait')});
+ assert.equal(calls,1);assert.equal(result.status,'source_exhausted');
+});
