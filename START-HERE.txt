@@ -1,4 +1,5 @@
-현재 Git 복제본은 README.md의 “다른 PC에서 시작하기”를 따릅니다.
+현재 Git 복제본의 Windows 이전 안내 (2026-11-22, 한국시간)
+docs/2026-11-22-windows-handoff.md
 아래 내용은 2026-11-10에 만들어진 이전 ZIP에 적용됩니다.
 
 Cream - 다른 Windows PC용 이전 패키지 (2026-11-10)

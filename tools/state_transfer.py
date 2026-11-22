@@ -34,6 +34,8 @@ def eligible(parts):
     if any(p.lower() in EXCLUDE or p.startswith(".") for p in parts):
         return False
     name = parts[-1].lower()
+    if name == "daily-report.enabled":
+        return True
     return not name.endswith((".lock", ".pid", ".log", ".tmp", ".enabled", ".heartbeat", "-wal", "-shm",
                               ".key", ".pem", ".exe", ".cmd", ".bat", ".ps1", ".dll"))
 

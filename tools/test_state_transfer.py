@@ -24,6 +24,10 @@ class PrivateTransferTests(unittest.TestCase):
             (run / "naver-live.json").write_text('{"status":"stopped"}')
             (run / "STOP").touch()
             (run / "process.json").write_text("{}")
+            work = source / "no1/explorations/work-demo"
+            work.mkdir(parents=True)
+            (work / "daily-report.enabled").touch()
+            (work / "autorun.enabled").touch()
             (board / "window-profile").mkdir()
             (board / "window-profile/Cookies").touch()
             archive = root / "private.zip"
@@ -44,6 +48,9 @@ class PrivateTransferTests(unittest.TestCase):
                 self.assertEqual(db.execute("SELECT folder FROM naver_runs").fetchone()[0], str(dest/"kream-runs"/run.name))
                 self.assertEqual(db.execute("SELECT state FROM cards").fetchone(), ("stopped",))
             self.assertTrue((dest/"kream-runs"/run.name/"STOP").is_file())
+            restored_work = dest / "kream-runs/agent-teams/explorations/work-demo"
+            self.assertTrue((restored_work / "daily-report.enabled").is_file())
+            self.assertFalse((restored_work / "autorun.enabled").exists())
             with self.assertRaisesRegex(ValueError, "Conflict"):
                 restore(imp)
 

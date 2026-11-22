@@ -19,10 +19,11 @@ function appendEntry(day, entry) {
   const args = ['-X', 'utf8', writer, '--date', day, '--entry', '-'];
   const options = {input: JSON.stringify(entry), encoding: 'utf8', windowsHide: true,
     env: {...process.env, CREAM_REPORTS_DIR: reports}};
-  let result = spawnSync(process.env.CREAM_PYTHON || 'python', args, options);
-  if (!process.env.CREAM_PYTHON && result.error?.code === 'ENOENT') {
-    result = spawnSync('py', ['-3', ...args], options);
-  }
+  const venv = path.join(path.dirname(path.dirname(writer)), '.venv', 'Scripts', 'python.exe');
+  const python = process.env.CREAM_PYTHON || (fs.existsSync(venv) ? venv : null);
+  const useLauncher = !python && process.platform === 'win32';
+  let result = spawnSync(python || (useLauncher ? 'py' : 'python3'), useLauncher ? ['-3', ...args] : args, options);
+  if (useLauncher && result.error?.code === 'ENOENT') result = spawnSync('python', args, options);
   if (result.error) throw result.error;
   if (result.status !== 0) throw Error(result.stderr.trim() || 'DAILY_REPORT_WRITE_FAILED');
 }
