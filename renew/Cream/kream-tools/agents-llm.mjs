@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { hash, readJson, writeJson, VERSION } from './agents-core.mjs';
+import { measuredUsage } from './agent-token-usage.mjs';
 
 const SCHEMA = { type: 'object', additionalProperties: false, required: ['findings'], properties: { findings: { type: 'array', items: {
   type: 'object', additionalProperties: false, required: ['id','action','reason'], properties: { id: { type: 'string' }, action: { type: 'string', enum: ['none','hold','exclude'] }, reason: { type: 'string' } }
@@ -23,16 +24,38 @@ export function invokeCodex(request, options = {}) {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'cream-review-')), schemaFile = path.join(temp, 'schema.json'), outputFile = path.join(temp, 'answer.json');
     fs.writeFileSync(schemaFile, JSON.stringify(SCHEMA));
     const executable = options.executable || process.env.CREAM_CODEX_EXE || 'codex';
-    const args = ['exec', '--json', '--ignore-user-config', '--skip-git-repo-check', '--ephemeral', '--sandbox', 'read-only', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort="high"', '--output-schema', schemaFile, '--output-last-message', outputFile, '-'];
+    const args = ['exec', '--json', '--ignore-user-config', '--skip-git-repo-check', '--ephemeral', '--sandbox', 'read-only', '-m', options.model || 'gpt-6.1-sol', '-c', 'model_reasoning_effort="high"', '--output-schema', schemaFile, '--output-last-message', outputFile, '-'];
     const child = (options.spawnProcess || spawn)(executable, args, { cwd: temp, windowsHide: true, shell: false, stdio: ['pipe','pipe','pipe'] });
     let size = 0, settled = false, eventBuffer = '', usage = null;
+    const readEvent = line => {
+      let event;
+      try { event = JSON.parse(line); } catch { return; }
+      if (event.type !== 'turn.completed') return;
+      const measured = measuredUsage(event.usage);
+      if (!measured) return;
+      if (!usage) usage = measured;
+      else for (const key of Object.keys(usage)) {
+        usage[key] = usage[key] == null || measured[key] == null ? null : usage[key] + measured[key];
+      }
+      options.onUsage?.(usage);
+    };
     const finish = (error) => { if (settled) return; settled = true; clearTimeout(timer);
-      try { if (error) reject(error); else { const output = JSON.parse(fs.readFileSync(outputFile, 'utf8')); Object.defineProperty(output, '_usage', { value: usage, enumerable: false }); resolve(output); } }
+      try { if (eventBuffer) readEvent(eventBuffer); if (error) reject(error); else { const output = JSON.parse(fs.readFileSync(outputFile, 'utf8')); Object.defineProperty(output, '_usage', { value: usage, enumerable: false }); resolve(output); } }
       catch (e) { reject(new Error(`AI 응답 읽기 실패: ${e.message}`)); }
       finally { fs.rmSync(temp, { recursive: true, force: true }); } };
     const kill = () => { if (child.pid && process.platform === 'win32') spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }); else child.kill('SIGKILL'); };
     const timer = setTimeout(() => { kill(); finish(new Error('AI 호출 시간 초과')); }, options.timeoutMs || 45000);
-    child.stdout.on('data', (chunk) => { eventBuffer += chunk.toString('utf8'); let i; while ((i = eventBuffer.indexOf('\n')) >= 0) { const line = eventBuffer.slice(0, i); eventBuffer = eventBuffer.slice(i + 1); try { const event = JSON.parse(line); if (event.type === 'turn.completed') usage = event.usage || null; } catch {} } if (eventBuffer.length > 200000) eventBuffer = ''; });
+    child.stdout.on('data', (chunk) => {
+      if (settled) return;
+      eventBuffer += chunk.toString('utf8');
+      let i;
+      while ((i = eventBuffer.indexOf('\n')) >= 0) {
+        const line = eventBuffer.slice(0,i);
+        eventBuffer = eventBuffer.slice(i+1);
+        try { readEvent(line); } catch (error) { kill(); finish(error); return; }
+      }
+      if (eventBuffer.length > 200000) eventBuffer = '';
+    });
     for (const stream of [child.stdout, child.stderr]) stream.on('data', (chunk) => { size += chunk.length; if (size > 2_000_000) { kill(); finish(new Error('AI 출력 한도 초과')); } });
     child.on('error', (e) => finish(new Error(`Codex CLI 실행 실패: ${e.code || e.message}`)));
     child.on('close', (code) => finish(code === 0 ? null : new Error(`Codex CLI 종료 코드 ${code}`)));

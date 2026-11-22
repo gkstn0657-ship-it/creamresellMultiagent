@@ -37,7 +37,7 @@ export function projectPoizon(cmd,d,p){
 }
 // Runs in the existing No1 tab; reads only fee keys, never account stores.
 export function readPoizonMarginSettings(){
- if(location.origin!=='https://no1.certi.life'||!location.pathname.startsWith('/sourcing/'))return null;
+ if(location.origin!=='https://onebox.team'||!location.pathname.startsWith('/sourcing/'))return null;
  let saved={};try{saved=JSON.parse(localStorage.getItem('priceCompareFee.v2')||'{}');}catch{}
  const defaults={apparelShoes:{rate:10,minFee:15000,maxFee:45000},goods:{rate:14,minFee:18000,maxFee:45000}};
  const p=saved.schemaVersion>=3?saved.poizon||{}:{apparelShoes:saved.poizon?.shoes||saved.poizon?.apparel||{}};
@@ -46,7 +46,7 @@ export function readPoizonMarginSettings(){
 }
 // Read mounted table props and rendered margins without opening/switching tabs.
 export function readPoizonDisplayedTable(spuId){
- if(location.origin!=='https://no1.certi.life'||!location.pathname.startsWith('/sourcing/'))return null;
+ if(location.origin!=='https://onebox.team'||!location.pathname.startsWith('/sourcing/'))return null;
  const result=[],seen=new Set(),queue=[...document.querySelectorAll('[data-v-app]')].map(el=>el._vnode);
  while(queue.length&&seen.size<50000){const v=queue.pop();if(!v||typeof v!=='object'||seen.has(v))continue;seen.add(v);if(Array.isArray(v)){queue.push(...v);continue;}
   if(v.component){const c=v.component;queue.push(c.subTree);if(c.type?.__name==='PoizonPriceTable'&&String(c.props?.data?.spuId)===spuId){

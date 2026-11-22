@@ -33,7 +33,7 @@ test('ranking command accepts only known filters and ALL popular section',()=>{
 test('page settings read returns only filters and does not invoke UI/store methods',t=>{
   const oldLocation=globalThis.location,oldDocument=globalThis.document;
   t.after(()=>{globalThis.location=oldLocation;globalThis.document=oldDocument;});
-  globalThis.location={origin:'https://no1.certi.life',pathname:'/sourcing/'};
+  globalThis.location={origin:'https://onebox.team',pathname:'/sourcing/'};
   globalThis.document={querySelectorAll:()=>[{__vue_app__:{config:{globalProperties:{$pinia:{state:{value:{musinsaRanking:{...settings,token:'secret',setCategory:()=>assert.fail('UI write')}}}}}}}}]};
   assert.deepEqual(readRankingSettings(),[settings]);
 });

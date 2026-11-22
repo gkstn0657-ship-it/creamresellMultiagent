@@ -1,3 +1,15 @@
 {
-  "mcpServers":{"cream_panel":{"type":"stdio","command":"C:/nodejs/node.exe","args":["C:/Users/HansuPark/Desktop/Cream/1109renew/Cream/automation/agent-team/control-mcp.mjs"],"cwd":"C:/Users/HansuPark/Desktop/Cream/1109renew/Cream"}}
+  "mcpServers": {
+    "cream_panel": {
+      "type": "stdio",
+      "command": "powershell.exe",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); $OutputEncoding=[Console]::OutputEncoding; $cli=if($env:CREAM_CODEX_EXE){$env:CREAM_CODEX_EXE}else{'codex'}; $config=& $cli mcp get cream_team --json | ConvertFrom-Json; if($LASTEXITCODE -ne 0 -or !$config.enabled -or $config.transport.type -ne 'stdio'){throw 'Run node automation/agent-team/register-mcp.mjs --register first.'}; $entry=@($config.transport.args); if($entry.Count -ne 1 -or [IO.Path]::GetFileName($entry[0]) -ne 'control-mcp.mjs'){throw 'Unexpected cream_team entry point.'}; & $config.transport.command @entry; exit $LASTEXITCODE"
+      ]
+    }
+  }
 }

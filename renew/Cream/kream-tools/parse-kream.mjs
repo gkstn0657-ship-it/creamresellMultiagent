@@ -15,6 +15,14 @@ for (const id of ids) {
   if (d.text.includes('거래 및 입찰 내역') && st >= 0) for (let i = st + 1; i < L.length && rows.length < 40; i++) {
     const s = L[i]; if (!s.endsWith('원')) continue; const v = s.slice(0, -1).split(',').join(''); if (!isNum(v) || L[i - 1].length >= 8) continue; rows.push({ size: L[i - 1], price: Number(v) });
   }
+  if (!rows.length && !d.blocked && !d.failed && new URL(d.url || 'https://kream.co.kr').pathname === '/products/' + id) {
+    const publicHeader = L.findIndex((line,index) => line === '거래일' && L[index-1] === '거래가' && L[index-2] === '옵션');
+    if (publicHeader >= 0) for(let i=publicHeader+1;i+2<L.length;i+=3){
+      const [size,price,when]=L.slice(i,i+3);
+      if(!/^[\d,]+원$/.test(price)||!/(전$|^방금|^\d{2,4}[.\/-]\d{1,2}[.\/-]\d{1,2})/.test(when))break;
+      rows.push({size,price:Number(price.replace(/[,원]/g,'')),when});
+    }
+  }
   const ps = rows.map((r) => r.price); const sz = {}; rows.forEach((r) => { sz[r.size] = (sz[r.size] || 0) + 1; });
   const m = model && model.match(re); const q1 = m ? `${m[1]} ${m[2]}${m[3]} ${m[4]}-${m[5]}` : (model ? model.replace(/-/g, ' ') : null); const q2 = m ? `${m[1]} ${m[2]}${m[3]} ${m[4]} ${m[5]}` : null;
   out.push({ id, title: d.title.replace(/ 정품 안심 거래.*$/, '').slice(0, 90), model, rel, n: ps.length, kreamMed: med(ps), kreamMin: ps.length ? Math.min(...ps) : null, kreamMax: ps.length ? Math.max(...ps) : null, sizes: sz, q1, q2, fmtOk: !!m, blocked: d.blocked });

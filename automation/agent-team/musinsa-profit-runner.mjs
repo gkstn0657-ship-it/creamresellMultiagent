@@ -53,7 +53,7 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
     };
     // A saved lookup with at least two failures already exhausted the new
     // one-retry policy. Preserve evidence and continue after upgrading a run.
-    if(work.continuous&&['source_retry','source_recovery_exhausted'].includes(state.recovery?.type)&&(state.recovery.attempts||state.recovery.attempt)>=2&&state.currentSource?.productId===state.recovery.sourceId&&!seenSources.has(state.currentSource.productId)&&isProductLookupFailure(state.recovery.cmd,state.recovery.error))skipFailedLookup(state.currentSource,state.recovery.error,state.recovery.attempts||state.recovery.attempt);
+    if((sourceTarget||work.continuous)&&['source_retry','source_recovery_exhausted'].includes(state.recovery?.type)&&(state.recovery.attempts||state.recovery.attempt)>=2&&state.currentSource?.productId===state.recovery.sourceId&&!seenSources.has(state.currentSource.productId)&&isProductLookupFailure(state.recovery.cmd,state.recovery.error))skipFailedLookup(state.currentSource,state.recovery.error,state.recovery.attempts||state.recovery.attempt);
     const updateProgress=()=>{const summary=workSummary(root,workOrders(root).find(w=>w.id===workId));state.profitableProductsFound=summary.profitableProductsFound??new Set(summary.entries.flatMap(e=>e.qualifiedProductIds)).size;return summary;};
     const targetReached=()=>sourceTarget?!work.continuous&&state.checkedSources>=work.targetSources:!work.continuous&&updateProgress().remainingProducts===0;
     const flush=async()=>{
@@ -107,7 +107,7 @@ export async function runMusinsaProfitSearch({root,workId,client=new BackgroundC
         let result;try{
         result=await collect({...source,category,observedAt:new Date().toISOString()},{client,seenKreamIds:seenMarkets,onEvidence:async(cmd,payload,data)=>write(path.join(evidenceDir,`${++evidenceIndex}.json`),{cmd,payload,data,observedAt:new Date().toISOString()})});
         }catch(e){
-          if(work.continuous&&state.recovery?.type==='source_recovery_exhausted'&&state.recovery.sourceId===source.productId&&isProductLookupFailure(state.recovery.cmd,e.message)){
+          if((sourceTarget||work.continuous)&&state.recovery?.type==='source_recovery_exhausted'&&state.recovery.sourceId===source.productId&&isProductLookupFailure(state.recovery.cmd,e.message)){
             skipFailedLookup(source,e.message,state.recovery.attempts);continue;
           }
           // Only an established product-specific mismatch is an exclusion.

@@ -38,7 +38,7 @@ http.createServer((req, res) => {
     lastPollAt = Date.now();
     const all = readJson('jobs.json', { jobs: [] }).jobs || [];
     // IP 제한 방지: 한 번에 1건, 직전 덤프로부터 MIN_GAP_MS 경과 후에만 내준다 (분당 최대 1페이지 수준)
-    const MIN_GAP_MS = 15000, PER_POLL = 4, HOURLY_CAP = 150;
+    const MIN_GAP_MS = 10000, PER_POLL = 4, HOURLY_CAP = 240;
     const pending = all.filter((j) => !fs.existsSync(path.join(dir, `dump-${safe(j.id)}.json`)));
     const mt = fs.readdirSync(dir).filter((f) => f.startsWith('dump-')).map((f) => fs.statSync(path.join(dir, f)).mtimeMs);
     const last = Math.max(0, ...mt); const lastHour = mt.filter((t) => Date.now() - t < 3600000).length;

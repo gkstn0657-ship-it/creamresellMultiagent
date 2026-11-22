@@ -1,4 +1,4 @@
-import {analysisProfile,MUSINSA_PROFILE,MUSINSA_OWNER,MUSINSA_REVIEWER} from './analysis-profiles.mjs';
+import {analysisProfile,MUSINSA_PROFILE,MUSINSA_MESSAGE,MUSINSA_OWNER,MUSINSA_REVIEWER} from './analysis-profiles.mjs';
 import {saveMusinsaSignals} from './musinsa-signals.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -6,11 +6,35 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {CodexServer} from './app-server.mjs';
 import {TeamStore,proposalHash,digest} from './store.mjs';
 import {TeamTools,ownerTools,reviewTools} from './tools.mjs';
-import {OWNER,REVIEWER,MODELS,reviewModel} from './roles.mjs';
+import {OWNER,REVIEWER,MODELS,reviewModel,GENERAL_PACKET_MESSAGE} from './roles.mjs';
 import {startEvidenceServer} from './evidence-server.mjs';
 import {validatePacket} from './packets.mjs';
 import {offerProductId} from './market-offer.mjs';
+import {sourceAvailability, SourceAvailabilityReview} from './source-availability.mjs';
 const ROOT=fileURLToPath(new URL('../../',import.meta.url));
+
+function loadPacket(store,packet) {
+  if(packet.productId!==offerProductId(store.data.mission?.product||{}))throw Error('PACKET_MISSION_MISMATCH');
+  const originals=[...packet.observations];
+  if(!originals.some(o=>o.kind==='collection_summary'))originals.push({kind:'collection_summary',
+    payload:{productId:packet.productId,offers:packet.offers,sourceQuotes:packet.sourceQuotes||[],gaps:packet.gaps,collectionStatus:packet.collectionStatus},
+    mode:originals[0].mode,observedAt:packet.collectedAt});
+  if(store.data.packetId===packet.id){
+    const saved=store.data.observations.filter(row=>row.active!==false);
+    const complete=originals.every((o,i)=>saved[i]?.kind===o.kind && saved[i].mode===o.mode &&
+      saved[i].observedAt===o.observedAt && digest(saved[i].payload)===digest(o.payload));
+    if(complete)return;
+  }
+  const entries=originals.map(o=>store.createObservation(o.kind,o.payload,{mode:o.mode,observedAt:o.observedAt}));
+  for(const old of [...store.data.observations,...store.data.calculations])old.active=false;
+  store.data.observations.push(...entries);
+  store.data.assessment=null;
+  if(store.data.packetId!==packet.id)store.data.materialReviewConflict=false;
+  store.data.packetMode=packet.observations.every(x=>x.mode!=='live')?'offline':'live';
+  store.data.packetId=packet.id;
+  store.save();
+}
+
 export async function ensureReviewRecorded({store,server,threadId,expectedBasis,stopped=()=>false}){
   let review=store.data.reviews.findLast(x=>x.threadId===threadId);
   if(!review){
@@ -34,24 +58,20 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
   }
   const fd=fs.openSync(lock,'wx');fs.writeFileSync(fd,String(process.pid));fs.closeSync(fd);
   const store=new TeamStore(dir,mission),actors=store.data.actors;
-  if(packet&&store.data.packetId!==packet.id){
-    validatePacket(packet);
-    if(packet.productId!==offerProductId(store.data.mission?.product||{}))throw Error('PACKET_MISSION_MISMATCH');
-    store.data.packetId=packet.id;
-    store.data.packetMode=packet.observations.every(x=>x.mode!=='live')?'offline':'live';
-    store.data.assessment=null;
-    for(const old of [...store.data.observations,...store.data.calculations])old.active=false;
-    for(const o of packet.observations)store.observe(o.kind,o.payload,{mode:o.mode,observedAt:o.observedAt});
-    if(!packet.observations.some(o=>o.kind==='collection_summary'))store.observe('collection_summary',{productId:packet.productId,offers:packet.offers,sourceQuotes:packet.sourceQuotes||[],gaps:packet.gaps,collectionStatus:packet.collectionStatus},{mode:packet.observations[0].mode,observedAt:packet.collectedAt});
-    store.save();
-  }
+  const previousPacketId=store.data.packetId;
+  if(packet)loadPacket(store,packet);
   const focused=analysisProfile(store.data.mission?.analysisProfile)===MUSINSA_PROFILE;
+  const gapFacts=!focused && (!message || message===GENERAL_PACKET_MESSAGE) && !resume && !previousPacketId && !store.data.ownerThreadId &&
+    !store.data.calculations.length && store.data.observations.every(x=>x.active!==false) ? sourceAvailability(packet) : null;
+  let gapReview;
   if(focused)saveMusinsaSignals(store);
   const ownerInstructions=focused?MUSINSA_OWNER:OWNER,reviewInstructions=focused?MUSINSA_REVIEWER:REVIEWER;
   const selectedOwnerTools=focused?ownerTools.filter(t=>!['collect_no1','investigate'].includes(t.name)):ownerTools;
   const active=new Map();let stopped=false,controlTimer,controlBusy=false,evidenceServer,reviewsThisTurn=0;
   const emit=(type,data={})=>{store.event(type,data);onEvent({type,...data});};
+  const checkStop=()=>{if(stopped||fs.existsSync(path.join(dir,'STOP')))throw Error('STOP_REQUESTED');};
   const server=serverFactory({cwd:dir,onTool:async p=>{
+    if(gapReview?.owns(p.threadId)){checkStop();return gapReview.record(p);}
     try{return await tools.execute(p);}catch(e){
       const code=String(e.message).slice(0,500);emit('tool_error',{tool:p.tool,threadId:p.threadId,code});
       // A failed collection is evidence of a blocker, never evidence of no stock/profit.
@@ -59,8 +79,14 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
       throw e;
     }
   }});
-  const actor=(threadId,role)=>{const old=actors.find(x=>x.threadId===threadId);if(old)old.role=role;else actors.push({threadId,role});store.save();};
+  const actor=(threadId,role)=>{
+    let row=actors.find(x=>x.threadId===threadId);
+    if(!row){row={threadId,role,tokenUsage:null};actors.push(row);}
+    else row.role=role;
+    store.save();return row;
+  };
   server.on('notification',m=>{
+    if(m.method==='thread/tokenUsage/updated')store.recordTokenUsage(m.params.threadId,m.params.tokenUsage?.total);
     if(m.method==='thread/started'){const t=m.params.thread;if(!actors.some(x=>x.threadId===t.id))actor(t.id,'native_subagent');emit('thread_started',{threadId:t.id,source:t.source,agentNickname:t.agentNickname,agentRole:t.agentRole});}
     if(m.method==='turn/started')active.set(m.params.threadId,m.params.turn.id);
     if(m.method==='turn/completed'){active.delete(m.params.threadId);emit('turn_completed',{threadId:m.params.threadId,status:m.params.turn.status});}
@@ -75,18 +101,26 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
     requestReview:async(question,proposal,needsDeepReview)=>{
       if(reviewsThisTurn++>=3)throw Error('REVIEW_BUDGET_REACHED');
       const before=store.basis();
-      const selected=reviewModel(proposal);
+      const materialConflict=Boolean(store.data.materialReviewConflict || (needsDeepReview && question?.trim()));
+      const selected=reviewModel(proposal,materialConflict);
       const response=await server.startThread({instructions:reviewInstructions,tools:reviewTools,...selected,config:{'agents.enabled':false,'mcp_servers.cream_evidence.enabled':false}});
       const threadId=response.thread.id;actor(threadId,'reviewer');
       const ids=[...store.data.observations,...store.data.calculations].filter(x=>x.active!==false).map(x=>x.id);
-      Object.assign(actors.find(x=>x.threadId===threadId),{model:selected.model,proposalHash:proposalHash(proposal),reviewBasis:before,requiredReads:ids});store.save();
-      await server.runTurn(threadId,JSON.stringify({task:'모든 evidenceIds의 원자료와 계산을 read_observation으로 직접 읽고 proposal의 판단이 근거와 모순되지 않는지 독립 검증한 후 record_review를 호출하라.',readInstructions:"Use read_observations in batches of at most 10 IDs. Read every evidenceId as a full original before record_review. Existing calculations are evidence; do not repeat them merely to resume.",question,proposal,evidenceIds:ids,expectedBasis:before}),{timeoutMs:120000});
+      Object.assign(actors.find(x=>x.threadId===threadId),{model:selected.model,effort:selected.effort,materialConflict,
+        proposal,proposedBy:store.data.ownerThreadId,proposalHash:proposalHash(proposal),reviewBasis:before,requiredReads:ids});store.save();
+      await server.runTurn(threadId,JSON.stringify({task:'read_next_originals를 remaining=0까지 호출해 모든 원자료와 계산을 읽고 제안을 독립 검증한다. record_review에 verdict와 issues를 보내라. basis를 생략하면 확인한 필수 원문이 연결된다. 계산을 반복하지 않는다.',question,proposal}),{timeoutMs:120000});
       return ensureReviewRecorded({store,server,threadId,expectedBasis:before,stopped:()=>stopped||fs.existsSync(path.join(dir,'STOP'))});
     }});
   try {
     if(fs.existsSync(path.join(dir,'STOP')))throw Error('STOP_REQUESTED');
-    if(resume&&store.data.assessment?.evidenceBasis===store.basis()){
+    const explicitReassessment=Boolean(message && message!==GENERAL_PACKET_MESSAGE && message!==MUSINSA_MESSAGE);
+    if(resume&&!explicitReassessment&&store.data.assessment?.evidenceBasis===store.basis()){
       store.data.status='complete';emit('assessment_complete',{decision:store.data.assessment.decision,readiness:store.data.assessment.readiness,recoveredFrom:'PERSISTED_ASSESSMENT'});return store.data;
+    }
+    if(resume || previousPacketId){
+      if(explicitReassessment)store.data.assessment=null;
+      for(const row of store.data.observations)if(row.kind==='source_availability_projection')row.active=false;
+      store.save();
     }
     evidenceServer=await startEvidenceServer(store);
     Object.assign(server.config,{'mcp_servers.cream_evidence.command':process.execPath,
@@ -94,6 +128,31 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
       'mcp_servers.cream_evidence.enabled':true});
     await server.start();
     let threadId=store.data.ownerThreadId;
+    const control=path.join(dir,'control');fs.mkdirSync(control,{recursive:true});
+    controlTimer=setInterval(async()=>{
+      if(controlBusy)return;controlBusy=true;
+      try{
+        if(fs.existsSync(path.join(dir,'STOP'))&&!stopped){stopped=true;store.data.status='stopping';emit('stop_requested');for(const [id,turnId] of active)await server.call('turn/interrupt',{threadId:id,turnId}).catch(()=>{});}
+        for(const file of fs.readdirSync(control).filter(x=>/^message-[a-f0-9-]+\.json$/.test(x))){
+          const location=path.join(control,file),command=JSON.parse(fs.readFileSync(location,'utf8'));
+          if(typeof command.message!=='string'||command.message.length>12000)throw Error('CONTROL_MESSAGE_INVALID');
+          const turnId=active.get(threadId);if(!turnId)continue;
+          await server.call('turn/steer',{threadId,expectedTurnId:turnId,input:[{type:'text',text:command.message}]});
+          fs.renameSync(location,location+'.delivered');emit('dot_instruction_delivered',{message:command.message});
+        }
+      }catch(e){emit('control_error',{code:e.message});}finally{controlBusy=false;}
+    },1000);
+    if(gapFacts){
+      gapReview=new SourceAvailabilityReview(store,packet,gapFacts);
+      store.data.status='running';emit('source_availability_started',{packetId:packet.id});
+      const hasNewInstruction=()=>fs.readdirSync(control).some(name=>/^message-[a-f0-9-]+\.json$/.test(name));
+      if(await gapReview.evaluate(server,actor,checkStop,timeoutMs,hasNewInstruction)){
+        store.data.status='complete';emit('assessment_complete',{decision:'hold',readiness:store.data.assessment.readiness});
+        return store.data;
+      }
+      gapReview.discardProjection();
+      emit('source_availability_full_review',{materialConflict:Boolean(store.data.materialReviewConflict)});
+    }
     const toolsHash=digest(selectedOwnerTools);
     let resumed=false;
     if(resume&&threadId&&store.data.toolSchemaHash===toolsHash){
@@ -113,20 +172,6 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
       Object.assign(actors.find(x=>x.threadId===threadId),{requestedModel:MODELS.owner.model,effectiveModel:response.model||null,effort:MODELS.owner.effort});store.save();
     }
     store.data.status='running';store.save();emit('owner_ready',{threadId});
-    const control=path.join(dir,'control');fs.mkdirSync(control,{recursive:true});
-    controlTimer=setInterval(async()=>{
-      if(controlBusy)return;controlBusy=true;
-      try{
-        if(fs.existsSync(path.join(dir,'STOP'))&&!stopped){stopped=true;store.data.status='stopping';emit('stop_requested');for(const [id,turnId] of active)await server.call('turn/interrupt',{threadId:id,turnId}).catch(()=>{});}
-        for(const file of fs.readdirSync(control).filter(x=>/^message-[a-f0-9-]+\.json$/.test(x))){
-          const location=path.join(control,file),command=JSON.parse(fs.readFileSync(location,'utf8'));
-          if(typeof command.message!=='string'||command.message.length>12000)throw Error('CONTROL_MESSAGE_INVALID');
-          const turnId=active.get(threadId);if(!turnId)continue;
-          await server.call('turn/steer',{threadId,expectedTurnId:turnId,input:[{type:'text',text:command.message}]});
-          fs.renameSync(location,location+'.delivered');emit('dot_instruction_delivered',{message:command.message});
-        }
-      }catch(e){emit('control_error',{code:e.message});}finally{controlBusy=false;}
-    },1000);
     await server.runTurn(threadId,message||JSON.stringify({mission:store.data.mission,
       instruction:'수집된 상품 정보 묶음을 먼저 확인하고 AI가 해당 상품의 수익성/채택을 판단하라. 이미 있는 자료는 재조회하지 않는다. 복잡한 분석에만 하위 에이전트를 사용하고 독립 검증 후 publish_assessment로 기록한다. 미확인을 수익 없음으로 단정하지 말라.'}),{timeoutMs});
     if(!store.data.assessment||store.data.assessment.evidenceBasis!==store.basis())throw Error('ASSESSMENT_NOT_COMPLETE');

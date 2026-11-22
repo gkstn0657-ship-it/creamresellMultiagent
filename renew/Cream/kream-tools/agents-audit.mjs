@@ -1,4 +1,5 @@
 import { readJson, writeJson, envelope, fresh, issue, tradesFromDump, median, profit, canonicalUrl, normalizeSize } from './agents-core.mjs';
+import { benefitColumns, retailerBenefitNotes } from './retailer-benefits.mjs';
 
 export function marketFor(ctx, offer, size) {
   const file = `dump-K${offer.pid}.json`, dump = readJson(ctx.dir, file), issues = [];
@@ -32,17 +33,22 @@ export function auditFinal(ctx, offers, verified, sellers, legacy) {
       const seller = sellers.find((s) => s.offerId === offer.id), market = marketFor(ctx, offer, v.size);
       const template = templates.find((r) => r['상품명']?.endsWith(` [${v.size}]`)) || templates[0] || {};
       // Preserve model-level eligibility rules, not failures specific to the first seller.
-      const eligible = Boolean(offer.model) && (ctx.policy.eligibilityMode === 'option-evidence' || (Number(offer.product.n) >= 10 && !/슈프림|뉴발란스|포터|디올|Supreme|New Balance|Porter|Dior/i.test(offer.productTitle)));
+      const eligible = Boolean(offer.model) && (ctx.policy.eligibilityMode === 'option-evidence' || !/슈프림|뉴발란스|포터|디올|Supreme|New Balance|Porter|Dior/i.test(offer.productTitle));
       if (!eligible) continue;
       for (const original of templates) {
         const originalSize = normalizeSize(String(original['상품명'] || '').match(/ \[([^\]]+)\]$/)?.[1] || '*');
         if (originalSize === v.size && canonicalUrl(original['판매처 링크']) === offer.url) claimed.add(original);
       }
       const issues = [...v.issues, ...(seller?.issues || [issue('SELLER_UNCONFIRMED', '판매자 검사 결과 없음')]), ...market.issues];
+      if (ctx.policy.eligibilityMode !== 'option-evidence' && Number(offer.product.n) < 10) issues.push(issue('MODEL_SAMPLE_INSUFFICIENT', 'KREAM 공개 체결 표본 10건 미만 · 판매처 혜택은 조사하고 수익 후보는 보류'));
       if (ctx.policy.costPolicyConfirmed !== true || !ctx.policy.costPolicySource || !ctx.policy.costPolicyVersion) issues.push(issue('COST_POLICY_UNCONFIRMED', '판매 수수료·발송비 규칙의 출처와 버전 확인 필요'));
       const cost = v.cost, net = cost != null && market.price != null ? profit(market.price, cost, ctx.policy) : null;
       const stressNet = cost != null && market.price != null ? profit(Math.floor(market.price * (1 - (ctx.policy.stressPriceDrop ?? 0))), cost, ctx.policy) : null;
-      if (net != null && net <= 0) issues.push(issue('NO_MARGIN', '동일 옵션 실제 원가 기준 이익 0 이하'));
+      if (net != null && net <= 0) {
+        const complete = issues.length === 0;
+        issues.push(complete ? issue('NO_MARGIN', '동일 옵션 실제 원가 기준 이익 0 이하') :
+          issue('MARGIN_UNCONFIRMED', '관측 원가 기준 현금 이익 0 이하 · 미확인된 구매·거래 조건을 확인한 뒤 판정'));
+      }
       if (stressNet != null && stressNet <= (ctx.policy.minCashProfit ?? 0)) issues.push(issue('MARGIN_BUFFER_INSUFFICIENT', '보수적 매도가 기준 개당 이익 기준 미달'));
       const excluded = v.status === 'excluded' || seller?.status === 'excluded' || issues.some((i) => i.code === 'NO_MARGIN');
       const status = excluded ? 'excluded' : issues.length ? 'hold' : 'verified';
@@ -52,7 +58,7 @@ export function auditFinal(ctx, offers, verified, sellers, legacy) {
         '상호명': seller?.name || '확인 불가', '대표자': '', '사업자구분': seller?.businessNumber ? `${seller.role} / ${seller.businessNumber}` : '확인 불가',
         '크림시세(원)': market.price ?? '', '시세기준': `${v.size} 동일 옵션 최근 30일 관측 체결 ${market.count}건 중앙값(예상 매도가)`, '최근30일 체결': market.count,
         '예상순수익(원)': net ?? '', '하락가정 순수익(원)': stressNet ?? '', '수익률(%)': net != null && cost > 0 ? +(net / cost * 100).toFixed(1) : '',
-        '최대 적립 포인트(원)': '', '포인트 포함 순수익(원)': '', '포인트 포함 수익률(%)': '',
+        '최대 적립 포인트(원)': '', ...benefitColumns(v.benefitNotes || [], v.source, v.benefits, net, cost),
         '판정': status === 'verified' ? '후보' : status === 'excluded' ? '제외' : '사람 검토',
         '사유': issues.map((i) => i.detail).join(' / '), '특별표시': `${template['특별표시'] || ''} · 매도가·수수료는 추정, 실제 정산과 구분`,
         '리스크': '필수 근거 검증 결과에 따른 판정. 체결 중앙값은 매출 보장 아님.',
@@ -60,12 +66,19 @@ export function auditFinal(ctx, offers, verified, sellers, legacy) {
         '관측시각': v.observedAt || '', '만료시각': v.expiresAt || '' };
       const risk = riskScore(offer, v, seller, market, row, ctx.policy);
       row['위험등급'] = risk.grade; row['위험근거'] = risk.text + `\n☞ 확인: ${row['사유'] || '매입 직전 가격·재고 재확인'}`;
-      rows.push(row); items.push({ id: v.id, offerId: offer.id, pid: offer.pid, size: v.size, status, issues, risk, evidence: [...v.evidence, ...(seller?.evidence || [])], market });
+      rows.push(row); items.push({ id: v.id, offerId: offer.id, pid: offer.pid, size: v.size, status, issues, risk, benefits: v.benefits, benefitNotes: v.benefitNotes, evidence: [...v.evidence, ...(seller?.evidence || [])], market });
     }
   }
   // Never silently drop legacy rows, including rejected models with no source offers.
   for (const original of legacy.rows) if (!claimed.has(original)) {
     const row = { ...original };
+    const file = `dump-N${row['크림ID']}-prod.json`;
+    const detail = readJson(ctx.dir, file);
+    const link = canonicalUrl(row['판매처 링크']);
+    const sameOffer = !link || [detail?.url, detail?.job?.url].some(url => canonicalUrl(url) === link);
+    const notes = sameOffer ? retailerBenefitNotes(detail, file, row['모델번호']) : [];
+    Object.assign(row, benefitColumns(notes, file));
+    if (notes.length && !link) row['판매처 링크'] = detail.url;
     if (String(row['판정']).startsWith('후보') || row['판정'] === '사람 검토') { row['판정'] = '사람 검토'; row['검증상태'] = 'hold'; row['검증사유코드'] = 'OFFER_NOT_BOUND'; row['사유'] = `${row['사유'] || ''} / 판매처·옵션별 검증 결과 연결 필요`; }
     rows.push(row);
   }

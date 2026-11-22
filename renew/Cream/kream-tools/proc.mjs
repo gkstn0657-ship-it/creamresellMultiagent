@@ -1,9 +1,10 @@
+import {fileURLToPath} from 'node:url';
 // 감시자·릴레이·시작 도구가 함께 쓰는 프로세스 함수 (2026-11-07)
 //  launchDetached: 부모(감시자, Claude Code 세션)가 꺼져도 살아남는 숨김 프로세스로 node 스크립트를 실행한다.
 //                  Windows 는 WMI(Win32_Process.Create)로 띄워 부모의 프로세스 묶음 밖에서 돌게 하고 cmd 창을 숨긴다.
 //  alive / cmdline / portOwner: 프로세스 확인. toast: Windows 알림 띄우기(기다리지 않음).
 import fs from 'node:fs'; import path from 'node:path'; import { spawn, spawnSync, execSync } from 'node:child_process';
-export const TOOLS = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+export const TOOLS = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.join(TOOLS, '..');
 export const RELAY_VERSION = 2;   // 릴레이 코드가 바뀌면 올린다. 감시자는 이보다 낮은 릴레이를 예전 버전으로 보고 다시 띄움
 export const LOCK = path.join(ROOT, 'kream-runs', 'watchdog.lock');

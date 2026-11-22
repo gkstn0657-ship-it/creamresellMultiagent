@@ -22,7 +22,7 @@ export function projectRankingProducts(data) {
 // Runs in the existing official page, reads only the four ranking selectors.
 // Does not change the screen, invoke store actions or expose account state.
 export function readRankingSettings() {
-  if(location.origin!=='https://no1.certi.life'||!location.pathname.startsWith('/sourcing/'))return null;
+  if(location.origin!=='https://onebox.team'||!location.pathname.startsWith('/sourcing/'))return null;
   const values=[];
   for(const el of document.querySelectorAll('[data-v-app]')) {
     const pinia=el.__vue_app__?.config?.globalProperties?.$pinia;

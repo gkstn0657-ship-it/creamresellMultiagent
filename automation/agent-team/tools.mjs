@@ -19,15 +19,17 @@ export const TOOL_DEFINITIONS=[
   def('read_margin_report','Read per-option No1-compatible margin amount, return rate and profit/loss/break-even/unknown for fast, normal, instant and desired selling prices. Uses collected evidence only, no network/UI. Default fees are explicit No1 defaults, not user settings. Desired price is hypothetical; missing prices stay unknown.',schema({desiredSellingPrice:num,taxMode:{type:'boolean'},fees:schema({kreamPercent:{type:'number',minimum:0,maximum:100},kreamInspectionFee:{type:'integer',minimum:0},poizonPercent:{type:'number',minimum:0,maximum:100},poizonMinFee:{type:'integer',minimum:0},poizonMaxFee:{type:'integer',minimum:0}},[])},[])),
   def('read_observations','Read up to 10 immutable originals or saved scenarios in one call. Returns full records, not summaries. Every required original must still be read.',schema({ids:{type:'array',items:{type:'string',minLength:1},minItems:1,maxItems:10,uniqueItems:true}})),
   def('read_observation','Read immutable original evidence or a saved numeric scenario by its ID.',schema({id:str})),
+  def('read_next_originals','Reviewer only. Read the next up to ten required originals and their IDs. Repeat until remaining is zero. No IDs to copy.',schema({})),
   def('collect_no1','Collect the scoped product through the authenticated background No1 adapter. May use an isolated guest cart internally. Never opens a UI or purchases.',schema({refreshReason:str})),
   def('investigate','Choose a collection operation for the current product only. Arguments are JSON encoded. market_page:{pid}; bind_identity:{pid,model,title,quote,file}; search_sources:{pid,query}; catalog_page:{pid,catalogIndex}; inspect_offer:{offerId}; read_evidence:{file,offset?,length?}. No desktop UI. Do not repeat an authentication failure.',schema({operation:{type:'string',enum:['market_page','bind_identity','search_sources','catalog_page','inspect_offer','read_evidence']},arguments:str})),
   def('calculate_scenario','Compute per-unit and quantity cash/economic profit. All costs are per unit; discounts already included in purchaseBeforePoints. null means unknown. Assumptions and evidence IDs must be explicit; this tool makes no adoption decision.',schema({purchaseBeforePoints:num,existingPointsSpent:num,inboundShipping:num,salePrice:num,sellerFeeRate:num,sellerFixedFee:num,outboundShipping:num,newPointsExpected:num,quantity:{type:'integer'},basis:arr,assumptions:arr})),
-  def('request_review','Product owner submits its exact proposed judgment for independent review. Hold/exclude reviews use Luna; only adopt candidates use Sol high for final verification. Publish exactly this reviewed proposal afterward.',schema({question:str,proposal:proposalSchema,needsDeepReview:{type:'boolean'}})),
-  def('record_review','Independent reviewer only. Record source verification and inconsistencies; pass is not a profitability or purchase approval.',schema({verdict:{type:'string',enum:['pass','rework']},issues:arr,basis:arr})),
+  def('request_review','Submit the exact proposal. Routine holds/exclusions use Luna. Set needsDeepReview only for material conflicts and state the conflicting evidence in question. Adoptions and material conflicts receive independent Sol/high verification.',schema({question:str,proposal:proposalSchema,needsDeepReview:{type:'boolean'}})),
+  def('record_review','Independent reviewer only. Record pass/rework and issues. Omit basis to cite all required originals actually read; pass is not a purchase approval.',schema({verdict:{type:'string',enum:['pass','rework']},issues:arr,basis:arr},['verdict','issues'])),
+  def('publish_reviewed_assessment','Owner only. Publish the latest passed exact proposal already stored by the host, if the independent review and evidence are still current.',schema({})),
   def('publish_assessment','Product owner only. Persist AI adoption/hold/exclude judgment with a current independent review. Unknown facts remain visible; never purchases.',schema({decision:{type:'string',enum:['adopt','hold','exclude']},reason:str,basis:arr,unresolved:arr,reviewId:str})),
 ];
-export const reviewTools=TOOL_DEFINITIONS.filter(x=>['team_state','read_musinsa_signals','read_market_schema','read_margin_report','read_observation','read_observations','record_review'].includes(x.name));
-export const ownerTools=TOOL_DEFINITIONS.filter(x=>x.name!=='record_review');
+export const reviewTools=TOOL_DEFINITIONS.filter(x=>['team_state','read_musinsa_signals','read_market_schema','read_margin_report','read_observation','read_observations','read_next_originals','record_review'].includes(x.name));
+export const ownerTools=TOOL_DEFINITIONS.filter(x=>!['record_review','read_next_originals'].includes(x.name));
 
 export class TeamTools {
   constructor(store,{client=new BackgroundClient(),replay=null,offline=false,relayDir=null,requestReview,stopCheck=()=>false,maxCalls=50}={}) {
@@ -57,6 +59,15 @@ export class TeamTools {
     }
     if(tool==='read_margin_report')return marginReport(this.store.data.observations,args);
     if(tool==='read_market_schema')return marketSchemas(this.store.data.observations,args);
+    if(tool==='read_next_originals'){
+      const actor=this.store.data.actors.find(a=>a.threadId===threadId&&a.role==='reviewer');
+      if(!actor?.requiredReads || actor.reviewBasis!==this.store.basis())throw Error('REVIEW_BASIS_CHANGED');
+      if(!this.reviewReads.has(threadId))this.reviewReads.set(threadId,new Set());
+      const seen=this.reviewReads.get(threadId), unread=actor.requiredReads.filter(id=>!seen.has(id));
+      const originals=unread.slice(0,10).map(id=>this.store.read(id));
+      for(const row of originals)seen.add(row.id);
+      return {originals,remaining:unread.length-originals.length};
+    }
     if(tool==='read_observations'){
       const ids=args.ids;
       if(!Array.isArray(ids)||ids.length<1||ids.length>10||ids.some(id=>typeof id!=='string'||!id.length)||new Set(ids).size!==ids.length||Object.keys(args).some(k=>k!=='ids'))throw Error('OBSERVATION_BATCH_INVALID');
@@ -104,6 +115,7 @@ export class TeamTools {
       return this.requestReview(args.question,proposal,args.needsDeepReview===true);
     }
     if(tool==='record_review') {
+      if(args.basis===undefined && reviewer)args.basis=this.store.data.actors.find(x=>x.threadId===threadId)?.requiredReads;
       if(!reviewer||!['pass','rework'].includes(args.verdict)||!Array.isArray(args.issues)||!Array.isArray(args.basis)||!args.basis.length)throw Error('REVIEW_INVALID');
       for(const id of args.basis)this.store.read(id);
       const actor=this.store.data.actors.find(x=>x.threadId===threadId);
@@ -111,6 +123,12 @@ export class TeamTools {
       if(args.basis.some(id=>!this.reviewReads.get(threadId)?.has(id))||actor.requiredReads.some(id=>!this.reviewReads.get(threadId)?.has(id)))throw Error('REVIEW_MUST_READ_ORIGINALS');
       const entry={...args,id:uid('review'),threadId,basisIds:args.basis,basis:actor.reviewBasis,proposalHash:actor.proposalHash,model:actor.model,at:new Date().toISOString()};
       this.store.data.reviews.push(entry);this.store.save();return entry;
+    }
+    if(tool==='publish_reviewed_assessment'){
+      if(threadId!==this.store.data.ownerThreadId)throw Error('ONLY_PRODUCT_OWNER_CAN_DECIDE');
+      const review=this.store.data.reviews.at(-1),actor=this.store.data.actors.findLast(a=>a.role==='reviewer'&&a.proposedBy===threadId);
+      if(!actor?.proposal||actor.threadId!==review?.threadId)throw Error('REVIEWED_PROPOSAL_UNAVAILABLE');
+      return publishAssessment(this.store,{...actor.proposal,reviewId:review.id},threadId);
     }
     if(tool==='publish_assessment')return publishAssessment(this.store,args,threadId);
     throw Error('UNKNOWN_TEAM_TOOL');

@@ -1,5 +1,28 @@
 import { readJson, writeJson, envelope, hash, money, validTime } from './agents-core.mjs';
 
+function dueReviews(history, now) {
+  const due = [];
+  for (const s of history.snapshots) for (const days of [7, 14]) {
+    const dueAt = new Date(Date.parse(s.at) + days * 86400000).toISOString();
+    if (Date.parse(dueAt) > Date.parse(now)) continue;
+    for (const row of s.rows) if (!history.events.some((e) => e.optionId === row.id && Date.parse(e.at) >= Date.parse(dueAt))) due.push({ snapshotId: s.id, optionId: row.id, days, dueAt, source: row.source, status: '재관측 필요' });
+  }
+  return due;
+}
+
+export function outcomeReviewRows(ctx, final) {
+  const history = readJson(ctx.dir,'outcomes.json',{snapshots:[],events:[]});
+  const known = new Set(history.events.map(event=>event.eventId));
+  const incoming = readJson(ctx.dir,'outcome-events.json',[]).filter(event =>
+    ['actual','review'].includes(event.kind) && !known.has(event.eventId));
+  const candidates = final.rows.filter(row=>row['판정'] === '후보');
+  const due = dueReviews(history,ctx.now);
+  if (!candidates.length && !incoming.length && !due.length) return [];
+  return [{id:'outcomes',phase:'precommit',reviewedCandidates:candidates.length,actualEvents:incoming.filter(e=>e.kind==='actual').length,
+    reviewEvents:incoming.filter(e=>e.kind==='review').length,due:due.length,
+    evidenceHash:hash([candidates.map(row=>[row['옵션ID'],row['예상순수익(원)']]),incoming,due]),changesApplied:false}];
+}
+
 export function trackOutcomes(ctx, final) {
   const history = readJson(ctx.dir, 'outcomes.json', { snapshots: [], events: [] });
   const rows = final.rows.map((r) => ({ id: r['옵션ID'] || `legacy-${hash([r['크림ID'], r['상품명'], r['판매처 링크']]).slice(0, 20)}`,
@@ -20,12 +43,7 @@ export function trackOutcomes(ctx, final) {
     if (e.kind === 'review' && (typeof e.valid !== 'boolean' || !history.snapshots.some((s) => s.id === e.snapshotId && Date.parse(s.at) <= Date.parse(e.at) && s.rows.some((r) => r.id === e.optionId)))) throw new Error('수동 검증 이벤트에는 valid 및 해당 시점의 snapshotId 필요');
     history.events.push({ eventId: e.eventId, optionId: e.optionId, kind: e.kind, at: e.at, realizedProfit, input: e }); known.add(e.eventId);
   }
-  const due = [];
-  for (const s of history.snapshots) for (const days of [7, 14]) {
-    const dueAt = new Date(Date.parse(s.at) + days * 86400000).toISOString();
-    if (Date.parse(dueAt) > Date.parse(ctx.now)) continue;
-    for (const row of s.rows) if (!history.events.some((e) => e.optionId === row.id && Date.parse(e.at) >= Date.parse(dueAt))) due.push({ snapshotId: s.id, optionId: row.id, days, dueAt, source: row.source, status: '재관측 필요' });
-  }
+  const due = dueReviews(history,ctx.now);
   const reviews = history.events.filter((e) => e.kind === 'review');
   const submitted = new Set(history.snapshots.flatMap((s) => s.rows.filter((r) => r.verdict === '후보').map((r) => r.id)));
   // Use the latest independent review per option; repeated reviews never inflate accuracy.

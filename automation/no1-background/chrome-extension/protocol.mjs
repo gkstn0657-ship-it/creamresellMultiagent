@@ -2,7 +2,7 @@ import {diagnosePoizonSearch,projectValidationFailure} from './poizon-diagnostic
 import {projectHistory,projectMarginSettings,projectDisplayedSchema} from './schema-data.mjs';
 import {validRankingRequest,projectRankingSettings,projectRankingProducts} from './ranking-data.mjs';
 import {POIZON_COMMANDS,validPoizonRequest,projectPoizon} from './poizon-data.mjs';
-export const RELAY_URL = 'wss://relay.certi.life/ws/v2';
+export const RELAY_URL = 'wss://relay.onebox.team/ws/v2';
 export const CLIENT_VERSION = '1.35.8';
 // Wire protocol version; compatible package-only fixes can have a newer manifest version.
 export const CONNECTOR_VERSION = '0.8.0';

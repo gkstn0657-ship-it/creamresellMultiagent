@@ -16,7 +16,7 @@ async function localRequest(key, route, body, signal) {
 // Only the existing official No1 web tab is read. No tabs/windows are opened,
 // activated, navigated, or closed. This function never returns user/password data.
 async function existingWebToken() {
-  const found = await chrome.tabs.query({url: ['https://no1.certi.life/sourcing/*', 'https://onebox.team/sourcing/*']});
+  const found = await chrome.tabs.query({url: ['https://onebox.team/sourcing/*']});
   // The main sourcing page is the session authority. Detached comparison
   // windows can retain an older session; never combine them with main pages.
   const main=found.filter(tab=>{try{return new URL(tab.url).hash.startsWith('#/main/');}catch{return false;}});
@@ -29,7 +29,7 @@ async function existingWebToken() {
       const frames = await chrome.scripting.executeScript({
         target: {tabId: tab.id, frameIds: [0]}, world: 'ISOLATED',
         func: () => {
-          if (location.origin !== 'https://no1.certi.life' || !location.pathname.startsWith('/sourcing/')) return null;
+          if (location.origin !== 'https://onebox.team' || !location.pathname.startsWith('/sourcing/')) return null;
           const storage = localStorage.getItem('no1seller:persistLogin') === 'true' ? localStorage : sessionStorage;
           const token = storage.getItem('appToken');
           return typeof token === 'string' && token.length > 0 && token.length <= 16384 && !/\s/.test(token) ? token : null;

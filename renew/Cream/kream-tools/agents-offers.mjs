@@ -4,6 +4,7 @@ import { stockSummary } from './stock-summary.mjs';
 import { canonicalUrl, offerId, optionId, productJobId, readJson, fresh, normalizeSize, validateQuote, moneyInQuote, money, issue, quote, envelope, writeJson, profit, sizeInQuote, quotedAmounts } from './agents-core.mjs';
 import { marketFor } from './agents-audit.mjs';
 import { searchOffers } from './margin-screen.mjs';
+import { retailerBenefitNotes, confirmedOptionBenefits } from './retailer-benefits.mjs';
 
 // Store platform is an exploration preference; actual seller proof remains mandatory.
 export const trustedMall = (mall) => /롯데ON|롯데온|롯데홈쇼핑|롯데백화점|현대Hmall|현대백화점|더현대|신세계|SSG|머스트잇|MUSTIT|더블유컨셉|W컨셉|무신사|29CM|트렌비|LFmall|CJ온스타일|GS\s?SHOP|SK스토아|KT알파|11번가|10x10|텐바이텐/i.test(mall);
@@ -12,7 +13,8 @@ export function isNaverStore(url) { try { const u = new URL(url); return u.proto
 export function collectOffers(ctx) {
   const all = [];
   for (const p of ctx.products) {
-    if (!p.model || (ctx.policy.eligibilityMode !== 'option-evidence' && (Number(p.n) < 10 || /슈프림|뉴발란스|포터|디올|Supreme|New Balance|Porter|Dior/i.test(p.title || '')))) continue;
+    const publicPreview = ctx.jobs?.some(j => j.id === 'K' + p.id && j.actions?.some(a => a.noScroll) && !j.actions.some(a => a.click));
+    if (!p.model || (ctx.policy.eligibilityMode !== 'option-evidence' && ((!publicPreview && Number(p.n) < 10) || /슈프림|뉴발란스|포터|디올|Supreme|New Balance|Porter|Dior/i.test(p.title || '')))) continue;
     const pid = String(p.id), cards = searchOffers(ctx.cards[pid]), cat = ctx.catalogs[pid];
     const sources = [...(cat?.offerList || []), ...(cat?.trustedList || []), ...(cat?.trustedMin ? [cat.trustedMin] : []), ...cards.filter((x) => !x.isCatalog)];
     const seen = new Set();
@@ -74,18 +76,22 @@ export function verifyOffer(ctx, offer) {
       }
       return item.value;
     };
-    const unitPrice = amount('unitPrice'), shipping = amount('shipping');
+    const observedBase = amount('unitPrice'), shipping = amount('shipping');
+    const benefits = confirmedOptionBenefits(available ? sr : null, file, observedBase, raw.text || '', ctx.now);
+    const unitPrice = benefits.payablePrice;
+    const notes = retailerBenefitNotes(raw, file, offer.model);
     if (unitPrice != null && ctx.policy.maxPurchasePrice != null && unitPrice > ctx.policy.maxPurchasePrice) reject('BUDGET_EXCEEDED', '개당 매입 예산 초과');
     if (unitPrice == null || unitPrice <= 0) reject('PRICE_UNCONFIRMED', '옵션별 실제 판매가·할인 조건 근거 필요');
     if (shipping == null) reject('SHIPPING_UNCONFIRMED', '배송비 근거 필요(무료도 0원으로 명시)');
     const conditional = /혜택가|첫 구매|쿠폰|회원가|카드할인/.test(raw.text || '');
     const conditionsOk = ev.conditionsConfirmed === true && scoped && validateQuote(ev.conditionsEvidence, raw, file);
-    if (conditional && !conditionsOk) reject('CONDITIONS_UNCONFIRMED', '쿠폰·회원·카드 조건 적용 가능 여부 미확인');
+    if (conditional && !conditionsOk && benefits.discount == null) reject('CONDITIONS_UNCONFIRMED', '쿠폰·회원·카드 조건 적용 가능 여부 미확인');
+    if (benefits.evidence) refs.push(benefits.evidence);
     for (const key of ['optionEvidence', 'conditionsEvidence']) if (validateQuote(ev[key], raw, file)) refs.push(ev[key]);
     for (const key of ['unitPrice', 'shipping']) if (ev[key] && validateQuote(ev[key].evidence, raw, file)) refs.push(ev[key].evidence);
     const excluded = issues.some((i) => ['SOLD_OUT','MODEL_MISMATCH','COLOR_MISMATCH'].includes(i.code));
     checks.push({ id: optionId(offer.id, size), offerId: offer.id, pid: offer.pid, size, sellerId: null, status: excluded ? 'excluded' : issues.length ? 'hold' : 'verified',
-      unitPrice, shipping, cost: money(unitPrice) && money(shipping) ? unitPrice + shipping : null, observedAt: raw.at || null,
+      unitPrice, shipping, benefits, benefitNotes: notes, cost: money(unitPrice) && money(shipping) ? unitPrice + shipping : null, observedAt: raw.at || null,
       expiresAt: raw.at && Number.isFinite(Date.parse(raw.at)) ? new Date(Date.parse(raw.at) + ctx.policy.freshnessMinutes * 60000).toISOString() : null, issues, evidence: refs, source: file });
   }
   return checks;

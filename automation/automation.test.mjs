@@ -23,14 +23,16 @@ test('efficient strategy keeps six rule roles and calls only needed model roles'
   const result = await runAgents(f.dir,{now:f.now,runId:'efficient',roleAi:true,efficientAi:true,
     providerId:'mock-claude',modelForRole:claudeModelForRole,roleProvider:async request => {calls.push(request.role);return approve(request);}});
   assert.equal(result.final.meta.에이전트팀.complete,true);
-  assert.deepEqual(calls,['offer_verifier','final_auditor']);
-  assert.equal(readJson(f.dir,'agents-team-ai.json').calls,2);
+  assert.deepEqual(calls,['offer_verifier','final_auditor','outcome_tracker']);
+  assert.equal(readJson(f.dir,'agents-team-ai.json').calls,3);
   assert.equal(result.final.rows[0]['판정'],'후보');
 });
 
 test('efficient strategy spends no model calls on an empty shortlist',async t => {
   const f = fixture(t);
   writeJson(f.dir,'k50.json',[]);
+  writeJson(f.dir,'k50-ids.json',[]);
+  writeJson(f.dir,'final-all.json',{rows:[],meta:{}});
   const result = await runAgents(f.dir,{now:f.now,runId:'empty',roleAi:true,efficientAi:true,
     roleProvider:() => assert.fail('no model call expected')});
   assert.equal(result.final.meta.에이전트팀.complete,true);

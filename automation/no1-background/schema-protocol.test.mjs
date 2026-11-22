@@ -34,7 +34,7 @@ test('fast-delivery field survives both wire projection passes',()=>{
 });
 test('actual saved fee/tax configuration follows No1 migration semantics',t=>{
   const old={location:globalThis.location,localStorage:globalThis.localStorage};t.after(()=>Object.assign(globalThis,old));
-  globalThis.location={origin:'https://no1.certi.life',pathname:'/sourcing/'};
+  globalThis.location={origin:'https://onebox.team',pathname:'/sourcing/'};
   const data={'priceCompareFee.v2':JSON.stringify({schemaVersion:4,kream:{percent:'7'}}),'market:kreamInspectionFee':'3000','market:taxMode':'true'};
   globalThis.localStorage={getItem:k=>data[k]??null};
   const r=readSavedMarginSettings();assert.equal(r.feePercent,7);assert.equal(r.inspectionFee,3000);assert.equal(r.taxMode,true);
@@ -43,7 +43,7 @@ test('actual saved fee/tax configuration follows No1 migration semantics',t=>{
 });
 test('production mounted VNode yields exact displayed margin and rate without clicks',t=>{
   const old={location:globalThis.location,document:globalThis.document};t.after(()=>Object.assign(globalThis,old));
-  globalThis.location={origin:'https://no1.certi.life',pathname:'/sourcing/'};
+  globalThis.location={origin:'https://onebox.team',pathname:'/sourcing/'};
   const line={querySelector:s=>s==='.size-cell'?{}:{innerText:({'.margin-value':'-11,600원','.ros-value':'-4.4%','.sales-cell':'3,076'})[s]}};
   const table={querySelectorAll:()=>[line],querySelector:s=>({innerText:s==='.sum-value'?'3,076건':'오늘 01:06 기준 최신'})};
   const component={type:{__name:'KreamPriceTable'},subTree:{el:table},props:{data:{productCode:'123',sizes:[{size:'L',option:'l',sales30d:3076,sales30dStatus:'ok',isEstimated:true,fast100:300000,normal:265000,highestBid:200000}]},marginInputs:{marginMode:'normal',purchasePrice:258200,desiredSellingPrice:0,feePercent:6,inspectionFee:2500,taxMode:false},applyFeeEvent:true}};

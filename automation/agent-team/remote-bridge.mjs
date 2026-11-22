@@ -1,12 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {workspacePaths} from './workspace-paths.mjs';
 import {handleMcp,controlTools} from './control-mcp.mjs';
 import {batchEvents} from './batch-events.mjs';
 import {createEventPublisher} from './event-publisher.mjs';
 const home=path.join(process.env.LOCALAPPDATA,'CreamDotBridge'),config=JSON.parse(fs.readFileSync(path.join(home,'connection.json'),'utf8'));
 const rootArg=process.argv.find(x=>x.startsWith('--root='))?.slice(7);
-const root=rootArg?path.resolve(rootArg):fileURLToPath(new URL('../../kream-runs/agent-teams/',import.meta.url));
+const root=rootArg?path.resolve(rootArg):workspacePaths().ledger;
 if(!/^https:\/\/[a-z0-9.-]+\.chatgpt\.site$/.test(config.origin))throw Error('INVALID_BRIDGE_ORIGIN');
 fs.mkdirSync(path.join(home,'jobs'),{recursive:true});
 const lock=path.join(home,'worker.pid');

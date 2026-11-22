@@ -3,6 +3,7 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {BackgroundClient} from '../no1-background/client.mjs';
+import {startMusinsaInspection} from './start-musinsa-inspection.mjs';
 import {startExploration} from './exploration.mjs';
 import {isAlive,monitorDirectory} from './health-monitor.mjs';
 import {writeJsonAtomic as write} from './atomic-json.mjs';
@@ -11,16 +12,40 @@ const retryable=new Set(['ASSESSMENT_NOT_COMPLETE','REVIEW_NOT_RECORDED','CODEX_
 const automaticResume=(root,args)=>startExploration(root,args,{requireOpenWork:true});
 
 // Deterministic recovery only. The AI diagnostic report is never a command.
-export async function pollExplorationWatchdog({root,workId,client=new BackgroundClient(),resume=automaticResume,alive=isAlive,now=Date.now}){
+export async function pollExplorationWatchdog({root,workId,client=new BackgroundClient(),resume=automaticResume,resumeInspection=startMusinsaInspection,alive=isAlive,now=Date.now}){
  const dir=monitorDirectory(root,workId),file=path.join(dir,'exploration-watchdog.json');
  const previous=read(file),work=read(path.join(root,'work-orders',workId+'.json')),state=read(path.join(dir,'state.json'));
  const attempts=previous?.attempts||[];
- const report={version:1,workId,pid:process.pid,at:new Date(now()).toISOString(),pollIntervalMs:10000,mode:'bounded-auto-resume',attempts};
+ const report={version:1,workId,pid:process.pid,at:new Date(now()).toISOString(),pollIntervalMs:10000,lastRecoveryAt:previous?.lastRecoveryAt||0,mode:'bounded-auto-resume',attempts};
  const finish=(status,reason,extra={})=>{Object.assign(report,{status,reason},extra);write(file,report);return report;};
- if(!work||work.scopeMode||!Number.isSafeInteger(work.targetProducts))return finish('blocked','GENERAL_WORK_REQUIRED');
+ const inspection=work?.scopeMode==='inspected-sources';
+ if(!work||(work.scopeMode&&!inspection)||!Number.isSafeInteger(work.targetProducts))return finish('blocked','GENERAL_WORK_REQUIRED');
  if(work.status==='stopped'||fs.existsSync(path.join(dir,'STOP'))||state?.status==='stopped')return finish('stopped','USER_STOPPED',{terminal:true});
- if(['complete','source_exhausted'].includes(state?.status))return finish('complete',state.status,{terminal:true});
+ if(state?.status==='complete')return finish('complete','complete',{terminal:true});
+ if(state?.status==='source_exhausted')return finish('source_exhausted','RANKING_EXHAUSTED',{terminal:true});
  if(alive(read(path.join(dir,'process.json'))?.pid))return finish('watching','WORKER_RUNNING');
+ const connectivity=['NO1_AUTH_REQUIRED','NO1_WEB_TAB_REQUIRED','NO1_BRIDGE_DISCONNECTED','NO1_BRIDGE_UNAVAILABLE','NO1_CONNECTOR_UPDATE_REQUIRED','NO1_BRIDGE_BUSY','NO1_BRIDGE_TIMEOUT','NO1_RELAY_TIMEOUT'];
+ const orphaned=['starting','discovering','running_batch'].includes(state?.status)&&!alive(read(path.join(dir,'process.json'))?.pid);
+ const failure=String(state?.error||'').replace(/^PREFETCH_FAILED: /,'');
+ if(orphaned||connectivity.includes(failure)||(inspection&&failure==='STOCK_CHECK_FAILED')){
+  const lastLaunch=previous?.lastRecoveryAt||0;
+  report.lastRecoveryAt=lastLaunch;
+  if(lastLaunch&&now()-lastLaunch<120000)return finish('cooldown','RETRY_BACKOFF');
+  try{
+   const bridge=await client.status();
+   if(!bridge.browserConnected||bridge.connectorVersion!==bridge.requiredConnectorVersion||bridge.requestPending)return finish('waiting','CONNECTOR_NOT_READY');
+   const session=await client.request('connector:session-status',{});
+   if(session.error||!(session.authenticatedTabCount>0)||session.distinctSessionCount!==1)return finish('waiting',session.error||'NO1_SESSION_NOT_READY');
+   await client.request(inspection?'musinsa:ranking:settings':'settings:get',{});
+  }catch(e){return finish('waiting',String(e.message).slice(0,120));}
+  report.lastRecoveryAt=now();
+  finish('restarting','RESTORE_EXISTING_WORK');
+  try{
+   const result=inspection?await resumeInspection(root,{workId}):await resume(root,{workId,resume:true});
+   return finish(result.launched?'restarted':'watching','RESTORE_EXISTING_WORK',{workerPid:result.pid||null});
+  }catch(e){return finish('blocked',String(e.message).slice(0,120));}
+ }
+ if(inspection)return finish('blocked',state?.error||'INSPECTION_REQUIRES_REVIEW');
  if(state?.status!=='needs_attention'||state?.error!=='BATCH_NEEDS_ATTENTION')return finish('blocked',state?.error||'UNCLASSIFIED_WORKER_EXIT');
  const runId=state.currentRunId;
  if(!work.entries?.some(e=>e.runId===runId))return finish('blocked','BATCH_OUTSIDE_WORK');

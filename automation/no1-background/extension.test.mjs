@@ -9,7 +9,7 @@ test('extension worker reads only existing No1 session and sends only projected 
   const store = {}; const localResults = []; const storageReads = []; const socketUrls = [];
   let listener, alarmListener, job, tabCount = 1, loggedIn = true;
   const waitFor = async predicate => { for (let i = 0; i < 100; i++) { if (predicate()) return; await new Promise(r => setTimeout(r, 5)); } throw Error('TEST_WORKER_TIMEOUT'); };
-  globalThis.location = {origin: 'https://no1.certi.life', pathname: '/sourcing/'};
+  globalThis.location = {origin: 'https://onebox.team', pathname: '/sourcing/'};
   globalThis.localStorage = {getItem: key => { storageReads.push(key); return key === 'no1seller:persistLogin' ? 'true' : key === 'appToken' && loggedIn ? no1Token : null; }};
   globalThis.sessionStorage = {getItem: () => { throw Error('WRONG_STORAGE'); }};
   globalThis.chrome = {
@@ -17,7 +17,7 @@ test('extension worker reads only existing No1 session and sends only projected 
       get: async keys => Object.fromEntries((Array.isArray(keys) ? keys : [keys]).map(key => [key, store[key]])),
       set: async values => { Object.assign(store, values); }, remove: async key => { delete store[key]; }
     }},
-    tabs: {query: async query => { assert.deepEqual(query.url, ['https://no1.certi.life/sourcing/*', 'https://onebox.team/sourcing/*']); return Array.from({length: tabCount}, (_, id) => ({id})); }},
+    tabs: {query: async query => { assert.deepEqual(query.url, ['https://onebox.team/sourcing/*']); return Array.from({length: tabCount}, (_, id) => ({id})); }},
     scripting: {executeScript: async options => {
       assert.equal(options.world, 'ISOLATED'); assert.deepEqual(options.target.frameIds, [0]);
       return [{result: options.func()}];
@@ -56,7 +56,7 @@ test('extension worker reads only existing No1 session and sends only projected 
 
   // A detached price-comparison page must not override the main session.
   const oldQuery=chrome.tabs.query,oldExecute=chrome.scripting.executeScript;
-  chrome.tabs.query=async()=>[{id:10,url:'https://no1.certi.life/sourcing/#/main/seller-integration'},{id:11,url:'https://no1.certi.life/sourcing/#/price-comparison'}];
+  chrome.tabs.query=async()=>[{id:10,url:'https://onebox.team/sourcing/#/main/seller-integration'},{id:11,url:'https://onebox.team/sourcing/#/price-comparison'}];
   chrome.scripting.executeScript=async options=>{assert.equal(options.target.tabId,10);assert.deepEqual(options.target.frameIds,[0]);return [{result:no1Token}];};
   job={id:'diagnostic',cmd:'connector:session-status',payload:{},deadline:Date.now()+5000};
   await waitFor(()=>localResults.length===2);

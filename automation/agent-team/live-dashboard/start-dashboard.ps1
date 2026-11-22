@@ -5,9 +5,12 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $taskRepo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\..')).Path
-if (-not $Root) { $Root = Join-Path (Split-Path -Parent $taskRepo) 'Cream\kream-runs\agent-teams' }
-$taskRoot = [System.IO.Path]::GetFullPath($Root)
 $taskNode = (Get-Command node -ErrorAction Stop).Source
+if (-not $Root) {
+    $Root = & $taskNode (Join-Path $PSScriptRoot '..\workspace-paths.mjs')
+    if ($LASTEXITCODE -ne 0 -or -not $Root) { throw 'Agent ledger path could not be resolved.' }
+}
+$taskRoot = [System.IO.Path]::GetFullPath($Root)
 if (-not $WorkId) {
     $taskOrders = Join-Path $taskRoot 'work-orders'
     if (Test-Path -LiteralPath $taskOrders) {
@@ -46,7 +49,14 @@ if ($WorkId -and $WorkId -match '^work-[a-f0-9-]{36}$') {
         Start-Process -FilePath $taskNode -ArgumentList @(('"' + $taskRemoteScript + '"'),('"--root=' + $taskRoot + '"'),('--work=' + $WorkId)) -WorkingDirectory $taskRepo -WindowStyle Hidden -RedirectStandardOutput (Join-Path $taskWorkDir 'remote-watchdog.log') -RedirectStandardError (Join-Path $taskWorkDir 'remote-watchdog-error.log') | Out-Null
     }
 }
-$taskEdge = @('C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe','C:\Program Files\Microsoft\Edge\Application\msedge.exe') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+$edgeCommand = Get-Command msedge.exe -ErrorAction SilentlyContinue
+$edgePaths = @(
+    if ($edgeCommand) { $edgeCommand.Source }
+    foreach ($base in @(${env:ProgramFiles(x86)}, $env:ProgramFiles, $env:LOCALAPPDATA)) {
+        if ($base) { Join-Path $base 'Microsoft\Edge\Application\msedge.exe' }
+    }
+)
+$taskEdge = $edgePaths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
 if (-not $taskEdge) { throw 'Microsoft Edge is required for the dashboard app window.' }
 $taskUrl = "http://127.0.0.1:$Port/"
 $taskHealth = "http://127.0.0.1:$Port/health"

@@ -19,7 +19,7 @@ const response = (req, data = {isLoggedIn: true}) => ({type: 'RES', v: 2, traceI
 test('official endpoint only; token never enters request payload or result', async () => {
   FakeSocket.behavior = (s, req) => s.receive(response(req, {isLoggedIn: true, token: 'must-be-discarded'}));
   const result = await call(); const s = FakeSocket.instances.at(-1); const url = new URL(s.url);
-  assert.equal(url.origin, 'wss://relay.certi.life'); assert.equal(url.pathname, '/ws/v2');
+  assert.equal(url.origin, 'wss://relay.onebox.team'); assert.equal(url.pathname, '/ws/v2');
   assert.equal(url.searchParams.get('token'), 'test-no1-secret');
   assert.deepEqual(result, {isLoggedIn: true}); assert.ok(!JSON.stringify(s.sent).includes('test-no1-secret'));
 });

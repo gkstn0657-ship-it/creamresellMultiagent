@@ -5,6 +5,7 @@
 //         ④ 가짜 상품 3개로 전체 흐름(run-all --replay) 재생 → 판정·엑셀까지 나오는지(실행 중 에러를 여기서 잡음)
 //         ⑤ 릴레이: 켜져 있는지, 최신 버전인지, 이 폴더를 서비스하는지, 8787 포트를 다른 프로그램이 잡고 있지 않은지
 //         ⑥ 확장 접속, STOP 파일, 감시자 상태
+import {projectPython} from '../../../kream-tools/project-python.mjs';
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import { spawnSync } from 'node:child_process';
 import { TOOLS, ROOT, RELAY_VERSION, alive, cmdline, portOwner, readLock, sameDir } from './proc.mjs';
 const args = process.argv.slice(2); const dirArg = args.find((a) => !a.startsWith('--'));
@@ -14,7 +15,7 @@ const PASS = (n, m) => add('통과', n, m), WARN = (n, m) => add('주의', n, m)
 
 // ① 환경
 const nodeMajor = Number(process.versions.node.split('.')[0]); nodeMajor >= 20 ? PASS('Node', process.versions.node) : FAIL('Node', `${process.versions.node} (20 이상 필요)`);
-const py = spawnSync('python', ['-I', '-c', `import sys, openpyxl; compile(open(r'${path.join(TOOLS, 'export-xlsx.py')}', encoding='utf-8').read(), 'export-xlsx.py', 'exec'); print(sys.version.split()[0], openpyxl.__version__)`], { encoding: 'utf8' });
+const py = spawnSync(projectPython, ['-I', '-c', `import sys, openpyxl; compile(open(sys.argv[1], encoding='utf-8').read(), 'export-xlsx.py', 'exec'); print(sys.version.split()[0], openpyxl.__version__)`, path.join(TOOLS, 'export-xlsx.py')], { encoding: 'utf8' });
 py.status === 0 ? PASS('Python·openpyxl·엑셀 스크립트', py.stdout.trim()) : FAIL('Python·openpyxl·엑셀 스크립트', (py.stderr || py.error || '').toString().split('\n').slice(-2).join(' ').slice(0, 200));
 
 // ② 문법
@@ -127,4 +128,4 @@ if (runDir) {
 
 const fails = results.filter((r) => r.level === '실패').length, warns = results.filter((r) => r.level === '주의').length;
 console.log(`사전 점검: 통과 ${results.length - fails - warns}, 주의 ${warns}, 실패 ${fails}`);
-process.exit(fails ? 1 : 0);
+process.exitCode = fails ? 1 : 0;
