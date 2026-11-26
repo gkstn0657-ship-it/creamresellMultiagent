@@ -37,7 +37,7 @@ export function projectDisplayedSchema(data,payload){
 // Runs in the official page's MAIN world, with no writes, navigation or UI actions.
 // Props identify the exact product; displayed DOM values preserve the UI rounding.
 export function readDisplayedTable(productCode){
-  if(location.origin!=='https://no1.certi.life'||!location.pathname.startsWith('/sourcing/'))return null;
+  if(!['https://no1.certi.life','https://onebox.team'].includes(location.origin)||!location.pathname.startsWith('/sourcing/'))return null;
   const snapshots=[];
   // Production Vue omits __vueParentComponent, but retains the mounted VNode.
   const tableComponents=new Map(),seen=new Set(),queue=[...document.querySelectorAll('[data-v-app]')].map(el=>el._vnode);
@@ -65,7 +65,7 @@ export function readDisplayedTable(productCode){
 }
 
 export function readSavedMarginSettings(){
-  if(location.origin!=='https://no1.certi.life'||!location.pathname.startsWith('/sourcing/'))return null;
+  if(!['https://no1.certi.life','https://onebox.team'].includes(location.origin)||!location.pathname.startsWith('/sourcing/'))return null;
   let saved={};try{saved=JSON.parse(localStorage.getItem('priceCompareFee.v2')||'{}');}catch{}
   let percent=saved.kream?.percent;
   if(saved.schemaVersion>=3&&saved.schemaVersion<4&&(!percent||percent==='4'))percent='6';

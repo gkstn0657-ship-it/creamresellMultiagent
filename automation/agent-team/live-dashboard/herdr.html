@@ -1,0 +1,33 @@
+﻿<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cream · Herdr 관제</title>
+<link rel="stylesheet" href="/app.css"><link rel="stylesheet" href="/herdr.css"><script type="module" src="/herdr.js"></script>
+</head>
+<body><div class="shell">
+<header class="topbar"><div class="brand">CREAM <span class="brand-light">/ AGENT CONTROL</span></div><div class="top-right"><a href="/">기존 탐색 화면 ↗</a><span id="connection" role="status">연결 중</span></div></header>
+<main>
+<section class="intro"><div><p class="eyebrow">HERDR WORKSPACE</p><h1>에이전트 관제실</h1></div><p class="lead">실행 상태와 에이전트 활동을 한곳에서.</p></section>
+<section class="control-bar" aria-label="작업 선택 및 제어">
+<div class="run-picker"><label for="runs">현재 작업</label><select id="runs"><option value="">불러오는 중</option></select><button id="refresh">새로고침</button></div>
+<div class="run-actions"><label for="budget">총 턴 한도</label><input id="budget" type="number" min="1" max="1000" aria-label="재개 시 총 턴 한도"><button id="resume" disabled>작업 재개</button><button id="stop" disabled>중지</button></div>
+</section><p id="feedback" role="status" aria-live="polite"></p>
+<section class="overview" aria-label="작업 요약">
+<article class="hero-panel">
+<div class="summary-heading"><div><span class="eyebrow">작업 상태</span><h2 id="headline">기록 확인 중</h2></div><span class="live-pill" id="state">확인 중</span></div>
+<div class="command-meta"><span id="process"></span><span id="turns"></span><span id="model"></span></div>
+<progress id="progress" value="0" max="1"></progress><div class="hero-footer"><span id="scope"></span><span id="updated"></span></div>
+<details class="mission-details"><summary>작업 지시 보기</summary><p id="mission" class="lead"></p></details><p id="error" role="alert"></p>
+</article>
+<div class="stat-grid">
+<article class="stat-card accent-mint"><span class="stat-label">완료 / 목표</span><div class="stat-value"><strong id="completed">—</strong></div><span class="stat-caption" id="unit">수량 확인 중</span></article>
+<article class="stat-card accent-purple"><span class="stat-label">독립 검수</span><div class="stat-value"><strong id="reviewed">—</strong></div><span class="stat-caption">검수 기록 확인</span></article>
+<article class="stat-card accent-orange"><span class="stat-label">수집 단계 제외</span><div class="stat-value"><strong id="skipped">—</strong></div><span class="stat-caption">판단·채택과 구분</span></article>
+<article class="stat-card accent-blue"><span class="stat-label">실행 워커</span><div class="stat-value"><strong id="workers">—</strong></div><span class="stat-caption">프로세스 생존 확인</span></article>
+</div></section>
+<section class="surface results-board" aria-label="상품 결과 현황"><div class="section-head"><div><p class="eyebrow">SOURCING RESULTS</p><h2>상품 결과 현황</h2></div><input id="result-search" type="search" placeholder="상품명 · ID 검색" aria-label="상품 결과 검색"></div><p id="result-caption" class="activity-help"></p><div id="result-tabs" class="result-tabs"></div><div id="results"></div><p class="result-note">채택은 독립 검수를 통과한 조사 후보이며 구매 승인이나 수익 보장이 아닙니다.</p></section>
+<section class="surface activity-board"><div class="section-head"><div><p class="eyebrow">LIVE ACTIVITY</p><h2>에이전트 작업 현황</h2></div><span class="tiny-status" id="agent-count">기록 확인 중</span></div><p class="activity-help">지휘 → 수집 → 상품 판단 ⇄ 독립 검수</p><div id="agents" class="agent-grid"></div></section>
+<section class="bottom-grid"><article class="surface"><div class="section-head"><h2>워커 · 상품 결과</h2><span class="eyebrow">RESULTS</span></div><div id="batches"></div></article><article class="surface"><div class="section-head"><h2>최근 실행 기록</h2><span class="eyebrow">ACTIVITY LOG</span></div><div id="events" class="event-feed"></div></article></section>
+<details class="surface policy"><summary><span>역할별 기본 모델</span><small>실제 배정은 에이전트 카드에서 확인</small></summary><div id="policy" class="policy-grid"></div></details>
+</main><footer><span>저장된 실행 기록 기준 · 2초마다 갱신</span><span>CREAM / HERDR</span></footer>
+</div></body></html>

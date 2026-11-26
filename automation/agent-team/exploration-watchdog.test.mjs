@@ -12,14 +12,15 @@ function fixture(){
  save(batchFile,{status:'needs_attention',results:[{productId:'1',status:'needs_attention',error:'ASSESSMENT_NOT_COMPLETE'}]});
  let launches=0,time=1000000,requests=0;
  const options={root,workId,alive:()=>false,now:()=>time,client:{status:async()=>({browserConnected:true,connectorVersion:'v',requiredConnectorVersion:'v'}),request:async(cmd)=>{assert.equal(cmd,'settings:get');requests++;return {}; }},resume:async(r,args)=>{assert.equal(r,root);assert.deepEqual(args,{workId,resume:true});launches++;return {launched:true,pid:123};}};
- return {options,dir,save,workFile,stateFile,batchFile,counts:()=>({launches,requests}),advance:()=>time+=120001};
+ return {options,dir,save,workFile,stateFile,batchFile,counts:()=>({launches,requests}),advance:(ms=120001)=>time+=ms};
 }
-test('saved work is resumed once, cooldown and durable batch budget prevent repeated loops',async()=>{
+test('saved work keeps retrying transient failures with increasing cooldown',async()=>{
  const f=fixture();assert.equal((await pollExplorationWatchdog(f.options)).status,'restarted');
  assert.equal((await pollExplorationWatchdog(f.options)).status,'cooldown');
  f.advance();assert.equal((await pollExplorationWatchdog(f.options)).status,'restarted');
- f.advance();assert.equal((await pollExplorationWatchdog(f.options)).reason,'BATCH_RETRY_LIMIT');
- assert.deepEqual(f.counts(),{launches:2,requests:2});
+ f.advance();assert.equal((await pollExplorationWatchdog(f.options)).status,'cooldown');
+ f.advance(120000);assert.equal((await pollExplorationWatchdog(f.options)).status,'restarted');
+ assert.deepEqual(f.counts(),{launches:3,requests:3});
 });
 test('live worker, completed work and explicit stop never launch',async()=>{
  const f=fixture();assert.equal((await pollExplorationWatchdog({...f.options,alive:()=>true})).status,'watching');
