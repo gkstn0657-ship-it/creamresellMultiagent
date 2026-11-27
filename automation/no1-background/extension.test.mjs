@@ -2,14 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-test('extension worker reads only existing No1 session and sends only projected results locally', async t => {
+for (const origin of ['https://no1.certi.life', 'https://onebox.team']) test(`extension worker reads only existing No1 session at ${origin} and sends only projected results locally`, async t => {
   const original = Object.fromEntries(['chrome', 'fetch', 'WebSocket', 'setInterval', 'location', 'localStorage', 'sessionStorage'].map(key => [key, globalThis[key]]));
   t.after(() => { for (const [key, value] of Object.entries(original)) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; } });
   const localKey = 'b'.repeat(64), no1Token = 'no1-session-secret-never-leaves-browser';
   const store = {}; const localResults = []; const storageReads = []; const socketUrls = [];
   let listener, alarmListener, job, tabCount = 1, loggedIn = true;
   const waitFor = async predicate => { for (let i = 0; i < 100; i++) { if (predicate()) return; await new Promise(r => setTimeout(r, 5)); } throw Error('TEST_WORKER_TIMEOUT'); };
-  globalThis.location = {origin: 'https://onebox.team', pathname: '/sourcing/'};
+  globalThis.location = {origin, pathname: '/sourcing/'};
   globalThis.localStorage = {getItem: key => { storageReads.push(key); return key === 'no1seller:persistLogin' ? 'true' : key === 'appToken' && loggedIn ? no1Token : null; }};
   globalThis.sessionStorage = {getItem: () => { throw Error('WRONG_STORAGE'); }};
   globalThis.chrome = {
@@ -42,7 +42,7 @@ test('extension worker reads only existing No1 session and sends only projected 
     close() { this.readyState = 3; }
   };
   globalThis.setInterval = () => 0;
-  await import('./chrome-extension/background.mjs');
+  await import('./chrome-extension/background.mjs?origin=' + encodeURIComponent(origin));
   await new Promise(r => setTimeout(r, 0));
   const request = message => new Promise(resolve => listener(message, {}, resolve));
   job = {id: 'one', cmd: 'settings:get', payload: {}, deadline: Date.now() + 5000};

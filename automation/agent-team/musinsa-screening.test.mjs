@@ -65,7 +65,8 @@ test('actual team setup selects focused instructions and disables exploratory ag
     async runTurn(){throw Error('TEST_END_AFTER_THREAD_SETUP');}
   }
   await assert.rejects(runTeam({dir:temp(),mission:{product:seed,analysisProfile:MUSINSA_PROFILE},serverFactory:()=>new FakeServer()}),/TEST_END_AFTER_THREAD_SETUP/);
-  assert.equal(launch.instructions,MUSINSA_OWNER);assert.equal(launch.config['agents.enabled'],false);
+  assert.ok(launch.instructions.startsWith(MUSINSA_OWNER));assert.match(launch.instructions,/request_model_upgrade/);assert.equal(launch.config['agents.enabled'],false);
+  assert.ok(launch.tools.some(t=>t.name==='request_model_upgrade'));
   assert.ok(launch.tools.some(t=>t.name==='request_review'));assert.ok(launch.tools.some(t=>t.name==='read_musinsa_signals'));
   assert.ok(!launch.tools.some(t=>['collect_no1','investigate'].includes(t.name)));
 });

@@ -29,7 +29,7 @@ async function existingWebToken() {
       const frames = await chrome.scripting.executeScript({
         target: {tabId: tab.id, frameIds: [0]}, world: 'ISOLATED',
         func: () => {
-          if (location.origin !== 'https://onebox.team' || !location.pathname.startsWith('/sourcing/')) return null;
+          if (!['https://no1.certi.life', 'https://onebox.team'].includes(location.origin) || !location.pathname.startsWith('/sourcing/')) return null;
           const storage = localStorage.getItem('no1seller:persistLogin') === 'true' ? localStorage : sessionStorage;
           const token = storage.getItem('appToken');
           return typeof token === 'string' && token.length > 0 && token.length <= 16384 && !/\s/.test(token) ? token : null;

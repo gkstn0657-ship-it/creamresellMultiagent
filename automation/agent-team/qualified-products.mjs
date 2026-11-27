@@ -33,7 +33,8 @@ function qualifiedEvidence(work,entry,row,state){
  const options=(row.qualification.eligibleOptions||[]).flatMap(option=>{
   const platform=option.platform==='poizon'?'poizon':option.platform==='kream'?'kream':defaultPlatform;
   const marketProductId=numericId(option.marketProductId)||fallbackMarketId;if(!marketProductId)return [];
-  return [{platform,marketProductId,size:oneLine(option.size)||null,sourceOption:oneLine(option.sourceOption)||null,stock:Number.isFinite(option.stock)?option.stock:null,expectedSales30d:Number.isFinite(option.expectedSales30d)?option.expectedSales30d:null}];
+  return [{platform,marketProductId,size:oneLine(option.size)||null,sourceOption:oneLine(option.sourceOption)||null,stock:Number.isFinite(option.stock)?option.stock:null,expectedSales30d:Number.isFinite(option.expectedSales30d)?option.expectedSales30d:null,
+   ...(Array.isArray(option.saleModes)?{saleModes:option.saleModes.map(m=>({mode:oneLine(m.mode)||null,channel:oneLine(m.channel)||null,askPrice:Number.isFinite(m.askPrice)?m.askPrice:null,channelTrades30d:Number.isFinite(m.channelTrades30d)?m.channelTrades30d:null,channelMedian30d:Number.isFinite(m.channelMedian30d)?m.channelMedian30d:null,marginAtChannelMedian:Number.isFinite(m.marginAtChannelMedian)?m.marginAtChannelMedian:null}))}:{})}];
  });
  const sourceUrl=schemas.map(schema=>musinsaUrl(schema.sourceUrl)).find(Boolean)||null;
  const qualifiedAt=safeTime(row.assessment.at)||safeTime(state.finishedAt)||safeTime(entry.at)||safeTime(work.createdAt);
@@ -77,7 +78,9 @@ export function renderQualifiedProductsMarkdown(registry){
   lines.push(`## ${index+1}. ${names.join(' / ')||product.canonicalProductId}`,'');
   const links=[...product.kreamProductIds.map(id=>`[KREAM ${id}](https://kream.co.kr/products/${id})`),...product.musinsaUrls.map((url,i)=>`[무신사${product.musinsaUrls.length>1?` ${i+1}`:''}](${url})`)];
   lines.push(`- 링크: ${links.join(' · ')||'공개 링크 없음'}`);
-  const options=product.eligibleOptions.map(option=>`${option.platform.toUpperCase()} ${option.size||option.sourceOption||'-'} · 재고 ${option.stock??'-'} · 30일 판매 ${option.expectedSales30d??'-'}`);
+  const modeLabel={fast:'⚡보관',normal:'일반',instant:'즉시'};
+  const modeText=option=>(option.saleModes||[]).map(m=>m.channel?`${modeLabel[m.mode]||m.mode} 체결 ${m.channelTrades30d??'-'}건·중앙 ${m.channelMedian30d??'-'}원→마진 ${m.marginAtChannelMedian??'-'}원`:`${modeLabel[m.mode]||m.mode} 호가 ${m.askPrice??'-'}원`).join(', ');
+  const options=product.eligibleOptions.map(option=>`${option.platform.toUpperCase()} ${option.size||option.sourceOption||'-'} · 재고 ${option.stock??'-'} · 30일 판매 ${option.expectedSales30d??'-'}${option.saleModes?.length?` · ${modeText(option)}`:''}`);
   lines.push(`- 통과 옵션: ${options.join(' / ')||'상세 근거 파일 참조'}`);
   lines.push(`- 최초 통과: ${product.firstQualifiedAt||'-'} · 최근 통과: ${product.lastQualifiedAt||'-'}`);
   if(product.lastAssessmentReason)lines.push(`- 최근 판단: ${oneLine(product.lastAssessmentReason).slice(0,300)}`);

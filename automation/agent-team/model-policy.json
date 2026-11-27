@@ -1,0 +1,44 @@
+{
+  "version": "placement-pilot-20261126-v1",
+  "experimentHash": "ebf4118e0c84afe2405fe7b6f619e0576ec4e9e3a9dfafe29ca2d49d296acc44",
+  "experimentReport": "kream-runs/model-placement-20261126/final-report.json",
+  "defaults": {
+    "coordinator": {
+      "model": "gpt-6.1-sol",
+      "effort": "high"
+    },
+    "owner": {
+      "model": "gpt-6-luna",
+      "effort": "medium"
+    },
+    "reviewer": {
+      "model": "gpt-6-luna",
+      "effort": "medium"
+    },
+    "research": {
+      "model": "gpt-6-luna",
+      "effort": "medium"
+    },
+    "deepReviewer": {
+      "model": "gpt-6.1-sol",
+      "effort": "high"
+    }
+  },
+  "upgrades": {
+    "coordinator": {
+      "model": "gpt-6.1-sol",
+      "effort": "high"
+    },
+    "owner": {
+      "model": "gpt-6.1-sol",
+      "effort": "high"
+    },
+    "reviewer": {
+      "model": "gpt-6.1-sol",
+      "effort": "high"
+    }
+  },
+  "maxAgentUpgrades": 1,
+  "adoptReviewFloor": "sol-high",
+  "status": "provisional-small-synthetic-pilot"
+}

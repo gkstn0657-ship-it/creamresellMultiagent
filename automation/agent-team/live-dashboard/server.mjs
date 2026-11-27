@@ -6,6 +6,7 @@ import {BackgroundClient} from '../../no1-background/client.mjs';
 import {control} from '../control-mcp.mjs';
 import {classifyError} from '../error-catalog.mjs';
 import {reopenWork,withWorkLock} from '../work-orders.mjs';
+import {herdrData,herdrAction,defaultRuns} from './herdr-data.mjs';
 import {workspacePaths} from '../workspace-paths.mjs';
 
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -102,14 +103,23 @@ export async function startDashboardWork({root,workId,client=new BackgroundClien
  if(state?.status==='waiting_for_retry')fs.writeFileSync(path.join(dir,'WAKE'),'dashboard start');
  return {ok:true,code:200,reason:state?.status==='waiting_for_retry'?'RETRY_WOKEN':'WORK_RUNNING',workerStarted:result.launched===true||result.reused===true};
 }
-export function createDashboardServer({root=defaultRoot,workId,port=8875,start=startDashboardWork}={}){
- const files=new Map([['/','index.html'],['/app.css','app.css'],['/app.js','app.js']]);
+export function createDashboardServer({root=defaultRoot,workId,port=8875,start=startDashboardWork,runsRoot=defaultRuns,manageHerdr=herdrAction}={}){
+ const files=new Map([['/','index.html'],['/app.css','app.css'],['/app.js','app.js'],['/herdr','herdr.html'],['/herdr.js','herdr.js'],['/herdr.css','herdr.css']]);
+ files.set('/agent-activity-ui.js','agent-activity-ui.js');
+ files.set('/results-ui.js','results-ui.js');
  const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8'};
- let starting=null;
+ let starting=null;const managing=new Set();
  const server=http.createServer((req,res)=>{
   const url=new URL(req.url,'http://127.0.0.1');
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
   res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'");
+  if(url.pathname==='/api/herdr/action'&&req.method==='POST'){
+   if(req.headers.origin!==`http://127.0.0.1:${server.address()?.port}`||!String(req.headers['content-type']||'').startsWith('application/json')){res.writeHead(403);res.end();return;}
+   let body='';req.on('data',p=>{body+=p;if(body.length>2048)req.destroy();});
+   req.on('end',async()=>{let id;try{const args=JSON.parse(body);id=args.runId;herdrData(runsRoot,id);if(!id||managing.has(id))throw Error('ACTION_PENDING');managing.add(id);
+    try{const result=await manageHerdr(runsRoot,id,args.action,args.maxTurns);res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(result));}finally{managing.delete(id);}
+   }catch(e){res.writeHead(409,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e.message}));}});return;
+  }
   if(url.pathname==='/api/start'&&req.method==='POST'){
    const origin=`http://127.0.0.1:${server.address()?.port||port}`;
    if(req.headers.origin!==origin||!String(req.headers['content-type']||'').startsWith('application/json')){res.writeHead(403);res.end();return;}
@@ -123,6 +133,7 @@ export function createDashboardServer({root=defaultRoot,workId,port=8875,start=s
    });return;
   }
   if(req.method!=='GET'){res.writeHead(405);res.end();return;}
+  if(url.pathname==='/api/herdr'){res.setHeader('Content-Type','application/json');try{res.end(JSON.stringify(herdrData(runsRoot,url.searchParams.get('run'))));}catch(e){res.writeHead(404);res.end(JSON.stringify({error:e.message}));}return;}
   if(url.pathname==='/health'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({app:'cream-musinsa-live-dashboard-v1'}));return;}
   if(url.pathname==='/api/state'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(liveDashboardData(root,workId)));return;}
   const file=files.get(url.pathname);if(!file){res.writeHead(404);res.end();return;}
@@ -134,5 +145,5 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1]
  const arg=n=>process.argv.find(v=>v.startsWith(`--${n}=`))?.slice(n.length+3);
  const root=arg('root')?path.resolve(arg('root')):defaultRoot,port=Number(arg('port')||8875);
  if(!Number.isInteger(port)||port<1024||port>65535)throw Error('INVALID_DASHBOARD_PORT');
- const app=createDashboardServer({root,workId:arg('work'),port});await app.listen();console.log(JSON.stringify({app:'cream-musinsa-live-dashboard-v1',port,root}));
+ const app=createDashboardServer({root,workId:arg('work'),port,runsRoot:arg('runs-root')?path.resolve(arg('runs-root')):defaultRuns});await app.listen();console.log(JSON.stringify({app:'cream-musinsa-live-dashboard-v1',port,root,herdr:`http://127.0.0.1:${port}/herdr`}));
 }

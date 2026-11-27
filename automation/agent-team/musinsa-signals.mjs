@@ -1,5 +1,6 @@
 import {buildMarketSchema} from './market-schema.mjs';
 import {sizeKey} from '../no1-background/size-binding.mjs';
+import {channelTrades,tradesForSize,tradePriceCheck,CHANNEL_FOR_MODE} from './trade-channels.mjs';
 const DAY=86400000;
 const median=xs=>{const a=xs.filter(Number.isFinite).sort((a,b)=>a-b);return a.length?(a[Math.floor((a.length-1)/2)]+a[Math.floor(a.length/2)])/2:null;};
 export function recentSales(trades,size) {
@@ -34,10 +35,12 @@ export function musinsaSignals(observations=[]) {
       stock:{quantity:p.stock?.selectedStockQuantity??null,available:p.stock?.selectedOption?.isAvailable??null},
       marginInputs:s.inputs,purchaseMatchesSourceQuote:s.purchaseMatchesSourceQuote,
       salesAsOf:s.salesAsOf,rows:s.rows.map(r=>{
-        const selected=research.selectedTrades?.selectedSize;
-        const trades=selected&&sizeKey(selected)===sizeKey(r.size)?research.selectedTrades:research.trades;
+        const trades=tradesForSize(research,r.size);
+        const channels=s.platform==='poizon'?null:channelTrades(trades,r.size);
         return {size:r.size,sourceOptionMatched:r.sourceOptionMatched,referenceOnly:!r.sourceOptionMatched,
-          margins:Object.fromEntries(Object.entries(r.margins).map(([mode,m])=>[mode,{salePrice:m.salePrice,amount:m.marginAmount,rate:m.marginRate,status:m.status,source:m.source,feeEventVerified:m.feeEventVerified??false}])),
+          margins:Object.fromEntries(Object.entries(r.margins).map(([mode,m])=>[mode,{salePrice:m.salePrice,amount:m.marginAmount,rate:m.marginRate,status:m.status,source:m.source,feeEventVerified:m.feeEventVerified??false,
+            ...(channels&&CHANNEL_FOR_MODE[mode]?{tradeCheck:tradePriceCheck(mode,m,channels,s.inputs)}:{})}])),
+          ...(channels?{channelTrades:channels}:{}),
           sales30d:{count:r.expectedSales30d,status:r.salesStatus,estimated:r.salesIsEstimated,basis:r.salesBasis,...(s.platform==='poizon'?{region:'GLOBAL',localSellerCount:r.localSales30d,localRegion:'LOCAL'}:{})},recent:s.platform==='poizon'?r.recent:recentSales(trades,r.size),...(s.platform==='poizon'?{localRecent:r.localRecent}:{})};
       }),purchaseAuthorized:false};
   });
@@ -48,11 +51,12 @@ export function saveMusinsaSignals(store) {
   const sources=store.data.observations.filter(o=>o.active!==false&&['no1_product','collection_error'].includes(o.kind));
   const sourceIds=sources.map(o=>o.id);
   const old=store.data.observations.findLast(o=>o.active!==false&&o.kind==='musinsa_screening_signals');
-  if(old?.payload.version===2&&JSON.stringify(old.payload.sourceIds)===JSON.stringify(sourceIds))return old;
+  if(old?.payload.version===3&&JSON.stringify(old.payload.sourceIds)===JSON.stringify(sourceIds))return old;
   if(old)old.active=false;
   return store.observe('musinsa_screening_signals',{
-    version:2,sourceIds,calculationSource:'deterministic_from_saved_no1_records',
+    version:3,sourceIds,calculationSource:'deterministic_from_saved_no1_records',
     method:{margin:'No1 formula or directly displayed value; see per-mode source and marginInputs',
+      channels:'KREAM per-size 30-day trades split into ⚡ storage-sale (isImmediateDelivery=true; matches fast/보판 mode) and normal (no flag; matches normal/일판 mode). margins.fast|normal.tradeCheck recomputes the margin at that channel\'s 30-day median trade price without fee-event previews.',
       recent:'KREAM: per-size individual record counts and median prices. POIZON: per-SKU daily aggregate counts and count-weighted chart prices; GLOBAL and LOCAL separately. No direction claim without complete 14-day coverage. Missing/abbreviated table counts stay unknown.',
       stock:'Selected source option only; zero and unknown preserved'},
     signals:musinsaSignals(sources)

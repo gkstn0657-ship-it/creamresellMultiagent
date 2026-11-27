@@ -12,13 +12,13 @@ test('login failures are not retried and stop interrupts recovery waits',async()
  let calls=0;const c=recoveringClient({request:async()=>{calls++;throw Error('KREAM_LOGIN_REQUIRED');}},{delays:[0,0]});await assert.rejects(c.request('x'),/KREAM_LOGIN_REQUIRED/);assert.equal(calls,1);
  let stop=false;const d=recoveringClient({request:async()=>{throw Error('KREAM_SEARCH_FAILED');}},{stopped:()=>stop,delays:[5000],sleep:async()=>{stop=true;}});await assert.rejects(d.request('x'),/STOP_REQUESTED/);
 });
-test('exhausted lookup retains source and cursor, counts no exclusion, and creates a failure event',async()=>{
+test('exhausted transport recovery retains source and cursor, counts no exclusion, and creates a failure event',async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cream-recovery-'));const w=startWork(root,{targetProfitableProducts:1,userInstruction:'find one profitable',requestId:'recovery'});let attempts=0;
- const client={request:async cmd=>{if(cmd.endsWith('settings'))return {category:'103000',period:'REALTIME',gender:'A',ageBand:'AGE_BAND_ALL'};if(cmd.endsWith('products'))return {products:[{rank:1,productId:'1',productName:'shoe',brandName:'brand'}]};attempts++;throw Error('KREAM_SEARCH_FAILED');}};
+ const client={request:async cmd=>{if(cmd.endsWith('settings'))return {category:'103000',period:'REALTIME',gender:'A',ageBand:'AGE_BAND_ALL'};if(cmd.endsWith('products'))return {products:[{rank:1,productId:'1',productName:'shoe',brandName:'brand'}]};attempts++;throw Error('NO1_RELAY_CONNECTION_FAILED');}};
  const result=await runMusinsaProfitSearch({root,workId:w.workId,client,recovery:{delays:[0,0]},collect:async(s,{client})=>client.request('mecro:inventory:search',{keyword:'MODEL',cursor:'1'}),execute:async()=>assert.fail('no judgment without data')});
  assert.equal(attempts,3);assert.equal(result.status,'needs_attention');assert.equal(result.checkedSources,0);assert.deepEqual(result.skipped,[]);
  const memory=JSON.parse(fs.readFileSync(path.join(root,'musinsa-discovery/state.json'),'utf8'));assert.deepEqual(memory.seenSourceIds,[]);assert.equal(Object.values(memory.contexts)[0].categoryIndex,0);
- const events=batchEvents(root);assert.equal(events.length,1);assert.equal(events[0].data.productCount,0);assert.match(events[0].data.error,/KREAM_SEARCH_FAILED/);
+ const events=batchEvents(root);assert.equal(events.length,1);assert.equal(events[0].data.productCount,0);assert.match(events[0].data.error,/NO1_RELAY_CONNECTION_FAILED/);
 });
 test('saved failed source remains retriable even when it drops out of the latest ranking',async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cream-retry-source-'));const w=startWork(root,{targetProfitableProducts:1,userInstruction:'find one profitable',requestId:'retry'});const dir=path.join(root,'explorations',w.workId);fs.mkdirSync(dir,{recursive:true});

@@ -16,7 +16,7 @@ export async function pollExplorationWatchdog({root,workId,client=new Background
  const dir=monitorDirectory(root,workId),file=path.join(dir,'exploration-watchdog.json');
  const previous=read(file),work=read(path.join(root,'work-orders',workId+'.json')),state=read(path.join(dir,'state.json'));
  const attempts=previous?.attempts||[];
- const report={version:1,workId,pid:process.pid,at:new Date(now()).toISOString(),pollIntervalMs:10000,lastRecoveryAt:previous?.lastRecoveryAt||0,mode:'bounded-auto-resume',attempts};
+ const report={version:1,workId,pid:process.pid,at:new Date(now()).toISOString(),pollIntervalMs:10000,lastRecoveryAt:previous?.lastRecoveryAt||0,mode:'continuous-auto-resume',attempts};
  const finish=(status,reason,extra={})=>{Object.assign(report,{status,reason},extra);write(file,report);return report;};
  const inspection=work?.scopeMode==='inspected-sources';
  if(!work||(work.scopeMode&&!inspection)||!Number.isSafeInteger(work.targetProducts))return finish('blocked','GENERAL_WORK_REQUIRED');
@@ -53,8 +53,8 @@ export async function pollExplorationWatchdog({root,workId,client=new Background
  const failed=(batch?.results||[]).filter(r=>r.status!=='complete');
  if(!failed.length||failed.some(r=>!retryable.has(r.error)))return finish('blocked','ERROR_REQUIRES_INSPECTION');
  const prior=attempts.filter(a=>a.runId===runId);
- if(prior.length>=2)return finish('blocked','BATCH_RETRY_LIMIT',{runId});
- if(prior.length&&now()-prior.at(-1).at<120000)return finish('cooldown','RETRY_BACKOFF',{runId});
+ const backoffMs=Math.min(120000*2**Math.min(Math.max(prior.length-1,0),3),900000);
+ if(prior.length&&now()-prior.at(-1).at<backoffMs)return finish('cooldown','RETRY_BACKOFF',{runId,retryAfterMs:backoffMs-(now()-prior.at(-1).at)});
  // An authenticated No1 session must exist before spending a resume attempt.
  try{
   const bridge=await client.status();

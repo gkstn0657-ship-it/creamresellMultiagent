@@ -13,10 +13,15 @@ export async function runContinuousMusinsa({root,workId,run=runMusinsaProfitSear
  try{
   for(;;){
    const work=workOrders(root).find(w=>w.id===workId);
-   if(!work||!['profitable-results','inspected-sources'].includes(work.scopeMode)||work.continuous!==true)throw Error('CONTINUOUS_MUSINSA_WORK_REQUIRED');
+   if(!work||!['profitable-results','inspected-sources'].includes(work.scopeMode))throw Error('CONTINUOUS_MUSINSA_WORK_REQUIRED');
+   // As requested on 2026-11-13, finite work is supervised too: environment
+   // failures (closed No1 tab, login, transport) wait and retry instead of
+   // ending the work. A finite scope still ends at its target or exhaustion.
+   const finite=work.continuous!==true;
    if(stopped())break;
    const result=await run({root,workId,onEvent});
    if(stopped())break;
+   if(finite&&['complete','source_exhausted'].includes(result.status))return result;
    if(result.status==='source_exhausted'||result.status==='complete'){
     const memoryFile=path.join(root,'musinsa-discovery','state.json'),memory=read(memoryFile),key=JSON.stringify(result.settings);
     if(memory?.contexts?.[key]){memory.contexts[key].categoryIndex=0;write(memoryFile,memory);}

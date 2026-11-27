@@ -92,3 +92,28 @@ test('starting continuous work attaches the independent watchdog',async()=>{
  const result=await control('cream_musinsa_work_continue',{workId:w.workId},{root,launchContinuous:async()=>{runner++;return {launched:true};},launchWatchdog:async()=>{watchdog++;}});
  assert.equal(result.continuous,true);assert.equal(runner,1);assert.equal(watchdog,1);
 });
+test('finite inspection runner holding only worker.lock is not reported as stopped',async()=>{
+ const {root,workId,dir}=fixture();
+ fs.writeFileSync(path.join(root,'work-orders',workId+'.json'),JSON.stringify({id:workId,status:'open',scopeMode:'inspected-sources',targetSources:1000}));
+ fs.writeFileSync(path.join(dir,'state.json'),JSON.stringify({status:'discovering',checkedSources:4,updatedAt:new Date().toISOString()}));
+ fs.unlinkSync(path.join(dir,'continuous.lock'));fs.writeFileSync(path.join(dir,'worker.lock'),String(process.pid));
+ const client={status:async()=>({browserConnected:true,connectorVersion:'0.8.0',requiredConnectorVersion:'0.8.0'})};
+ const monitor=await pollWatchdog({root,workId,client,remoteBridgeStatus:null,notify:()=>{}});
+ assert.equal(monitor.workerAlive,true);assert.notEqual(monitor.reason,'WORKER_NOT_RUNNING');
+ fs.unlinkSync(path.join(dir,'worker.lock'));
+ const stopped=await pollWatchdog({root,workId,client,remoteBridgeStatus:null,notify:()=>{}});
+ assert.equal(stopped.workerAlive,false);assert.equal(stopped.reason,'WORKER_NOT_RUNNING');
+});
+test('a finished finite scope is not reported as a stopped worker',async()=>{
+ const {root,workId,dir}=fixture();
+ fs.writeFileSync(path.join(root,'work-orders',workId+'.json'),JSON.stringify({id:workId,status:'open',scopeMode:'inspected-sources',targetSources:1000}));
+ fs.unlinkSync(path.join(dir,'continuous.lock'));
+ const client={status:async()=>({browserConnected:true,connectorVersion:'0.8.0',requiredConnectorVersion:'0.8.0'})};
+ for(const status of ['source_exhausted','complete']){
+  fs.writeFileSync(path.join(dir,'state.json'),JSON.stringify({status,checkedSources:638}));
+  const monitor=await pollWatchdog({root,workId,client,remoteBridgeStatus:null,notify:()=>assert.fail('no alert for a normal end')});
+  assert.equal(monitor.status,'finished');assert.equal(monitor.severity,'none');assert.equal(monitor.code,200);
+ }
+ fs.writeFileSync(path.join(dir,'state.json'),JSON.stringify({status:'needs_attention',error:'X',checkedSources:5}));
+ assert.equal((await pollWatchdog({root,workId,client,remoteBridgeStatus:null,notify:()=>{}})).reason,'WORKER_NOT_RUNNING');
+});

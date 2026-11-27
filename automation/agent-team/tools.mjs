@@ -23,10 +23,10 @@ export const TOOL_DEFINITIONS=[
   def('collect_no1','Collect the scoped product through the authenticated background No1 adapter. May use an isolated guest cart internally. Never opens a UI or purchases.',schema({refreshReason:str})),
   def('investigate','Choose a collection operation for the current product only. Arguments are JSON encoded. market_page:{pid}; bind_identity:{pid,model,title,quote,file}; search_sources:{pid,query}; catalog_page:{pid,catalogIndex}; inspect_offer:{offerId}; read_evidence:{file,offset?,length?}. No desktop UI. Do not repeat an authentication failure.',schema({operation:{type:'string',enum:['market_page','bind_identity','search_sources','catalog_page','inspect_offer','read_evidence']},arguments:str})),
   def('calculate_scenario','Compute per-unit and quantity cash/economic profit. All costs are per unit; discounts already included in purchaseBeforePoints. null means unknown. Assumptions and evidence IDs must be explicit; this tool makes no adoption decision.',schema({purchaseBeforePoints:num,existingPointsSpent:num,inboundShipping:num,salePrice:num,sellerFeeRate:num,sellerFixedFee:num,outboundShipping:num,newPointsExpected:num,quantity:{type:'integer'},basis:arr,assumptions:arr})),
-  def('request_review','Submit the exact proposal. Routine holds/exclusions use Luna. Set needsDeepReview only for material conflicts and state the conflicting evidence in question. Adoptions and material conflicts receive independent Sol/high verification.',schema({question:str,proposal:proposalSchema,needsDeepReview:{type:'boolean'}})),
-  def('record_review','Independent reviewer only. Record pass/rework and issues. Omit basis to cite all required originals actually read; pass is not a purchase approval.',schema({verdict:{type:'string',enum:['pass','rework']},issues:arr,basis:arr},['verdict','issues'])),
-  def('publish_reviewed_assessment','Owner only. Publish the latest passed exact proposal already stored by the host, if the independent review and evidence are still current.',schema({})),
+  def('request_review','Submit the exact proposal for independent review. Routine reviews use the measured role default. Set needsDeepReview=true with a concrete question for conflicting evidence; adopt proposals and prior rework use Sol/high. Publish exactly the reviewed proposal afterward.',schema({question:str,proposal:proposalSchema,needsDeepReview:{type:'boolean'}})),
+  def('record_review','Independent reviewer only. Record source verification and inconsistencies; pass is not a profitability or purchase approval.',schema({verdict:{type:'string',enum:['pass','rework']},issues:arr,basis:arr},['verdict','issues'])),
   def('publish_assessment','Product owner only. Persist AI adoption/hold/exclude judgment with a current independent review. Unknown facts remain visible; never purchases.',schema({decision:{type:'string',enum:['adopt','hold','exclude']},reason:str,basis:arr,unresolved:arr,reviewId:str})),
+  def('publish_reviewed_assessment','Owner only: publish the exact saved independently reviewed proposal. Prefer after a pass to avoid copying errors. All independent current-basis and proposal-hash checks still apply.',schema({reviewId:str},[])),
 ];
 export const reviewTools=TOOL_DEFINITIONS.filter(x=>['team_state','read_musinsa_signals','read_market_schema','read_margin_report','read_observation','read_observations','read_next_originals','record_review'].includes(x.name));
 export const ownerTools=TOOL_DEFINITIONS.filter(x=>!['record_review','read_next_originals'].includes(x.name));
@@ -121,16 +121,15 @@ export class TeamTools {
       const actor=this.store.data.actors.find(x=>x.threadId===threadId);
       if(!actor.proposalHash||actor.reviewBasis!==this.store.basis())throw Error('REVIEW_BASIS_CHANGED');
       if(args.basis.some(id=>!this.reviewReads.get(threadId)?.has(id))||actor.requiredReads.some(id=>!this.reviewReads.get(threadId)?.has(id)))throw Error('REVIEW_MUST_READ_ORIGINALS');
-      const entry={...args,id:uid('review'),threadId,basisIds:args.basis,basis:actor.reviewBasis,proposalHash:actor.proposalHash,model:actor.model,at:new Date().toISOString()};
+      const entry={...args,id:uid('review'),threadId,basisIds:args.basis,basis:actor.reviewBasis,proposalHash:actor.proposalHash,proposal:actor.reviewProposal?structuredClone(actor.reviewProposal):undefined,model:actor.model,at:new Date().toISOString()};
       this.store.data.reviews.push(entry);this.store.save();return entry;
     }
-    if(tool==='publish_reviewed_assessment'){
-      if(threadId!==this.store.data.ownerThreadId)throw Error('ONLY_PRODUCT_OWNER_CAN_DECIDE');
-      const review=this.store.data.reviews.at(-1),actor=this.store.data.actors.findLast(a=>a.role==='reviewer'&&a.proposedBy===threadId);
-      if(!actor?.proposal||actor.threadId!==review?.threadId)throw Error('REVIEWED_PROPOSAL_UNAVAILABLE');
-      return publishAssessment(this.store,{...actor.proposal,reviewId:review.id},threadId);
-    }
     if(tool==='publish_assessment')return publishAssessment(this.store,args,threadId);
+    if(tool==='publish_reviewed_assessment'){
+      const review=args.reviewId?this.store.data.reviews.find(r=>r.id===args.reviewId):this.store.data.reviews.at(-1);
+      if(!review?.proposal)throw Error('REVIEW_PROPOSAL_NOT_SAVED_REQUEST_NEW_REVIEW');
+      return publishAssessment(this.store,{...structuredClone(review.proposal),reviewId:review.id},threadId);
+    }
     throw Error('UNKNOWN_TEAM_TOOL');
   }
   async collect(threadId) {
