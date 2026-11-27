@@ -1,7 +1,7 @@
 import {renderAgents} from '/agent-activity-ui.js';
 import {renderResults} from '/results-ui.js';
 const $=id=>document.getElementById(id),put=(id,v)=>{$(id).textContent=v??'—';};
-const labels={ready:'실행 준비',running:'진행 중',complete:'완료',blocked:'진행 차단',needs_attention:'확인 필요',stopped:'중지됨',source_exhausted:'후보 소진',judging:'상품 판단',collecting:'수집 중',launch_pending:'실행 요청',hold:'보류',exclude:'제외',adopt:'조사 후보 채택',owner:'상품 담당',owner_retired:'이전 담당',reviewer:'독립 검수'};
+const labels={ready:'실행 준비',waiting_connection:'No1 연결 대기',running:'진행 중',complete:'완료',blocked:'진행 차단',needs_attention:'확인 필요',stopped:'중지됨',source_exhausted:'후보 소진',judging:'상품 판단',collecting:'수집 중',launch_pending:'실행 요청',hold:'보류',exclude:'제외',adopt:'조사 후보 채택',owner:'상품 담당',owner_retired:'이전 담당',reviewer:'독립 검수'};
 const label=v=>labels[v]||v||'기록 없음',model=m=>m?`${m.model||'모델 미기록'} / ${m.effort||'강도 미기록'}`:'기존 기록에 모델 없음';
 Object.assign(labels,{discovering:'상품 탐색 중',waiting_for_retry:'재시도 대기',running_batch:'배치 처리 중',recovering:'복구 중'});
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;};
@@ -15,10 +15,11 @@ function render(d){
  if(!d.selected){renderAgents([]);put('headline','등록된 Herdr 작업이 없습니다');put('mission','새 작업이 저장되면 자동으로 나타납니다.');buttons();return;}
  renderAgents(d.agents||[],selected);
  renderResults(d);
- $('budget').disabled=!!d.continuous;
+ $('budget').disabled=!!d.continuous||!!d.mission.continuous;
  put('state',label(d.status));put('headline',d.stopping&&d.controllerAlive?'중지 요청 처리 중':label(d.status));put('mission',d.mission.instruction);put('model',model(d.model));put('turns',`턴 ${d.turns} / ${d.mission.maxTurns}`);put('process',d.controllerAlive?'지휘자 프로세스 실행 중':'지휘자 프로세스 종료');put('scope',`${d.mission.source} · 기존 작업 범위 유지`);put('updated',new Date(d.observedAt).toLocaleTimeString('ko-KR'));put('error',d.error||(!d.controllerAlive&&d.status==='running'?'실행 기록은 진행 중이지만 지휘자 프로세스가 없습니다.':''));
  put('completed',`${d.completed} / ${d.mission.targetProducts}`);put('unit',d.mission.source==='musinsa-ranking'?'확인한 구매처 상품 수':'검수 완료 상품 수');put('reviewed',d.reviewed);put('skipped',d.skipped);put('workers',d.batches.filter(b=>b.alive).length);$('progress').max=d.mission.targetProducts;$('progress').value=d.completed;
  if(d.continuous){put('completed',`${d.completed} / ∞`);put('unit','확인한 구매처 상품 수');put('model','규칙 기반 연속 실행기');put('turns','중지 요청까지 계속');put('process',d.controllerAlive?'연속 실행기 동작 중':'연속 실행기 종료');put('workers',(d.agents||[]).filter(a=>a.role==='worker'&&a.status==='working').length);$('progress').max=1;$('progress').value=0;}
+ if(d.mission.continuous){put('completed',`${d.completed} / ∞`);put('turns',`지휘자 턴 ${d.turns} · 중지 요청까지 계속`);$('progress').max=1;$('progress').value=0;}
  if($('budget').dataset.run!==selected){$('budget').value=d.mission.maxTurns??'';$('budget').dataset.run=selected;}
  $('batches').replaceChildren(...d.batches.map(b=>{const n=el('section',null,'batch');n.append(el('h3',`${label(b.status)} · ${b.alive?'워커 실행 중':'워커 종료'} · ${b.paneId||'pane 미기록'}`),el('small',b.runId),el('p',b.reason));if(b.error)n.append(el('p',b.error));
  for(const p of b.products){const row=el('div',null,'product');row.append(el('strong',`${p.productId} · ${label(p.decision||p.status)}`),el('small',p.verified?'독립 검수 기록 확인됨':'독립 검수 완료 미확인'),el('p',p.reason||p.error||'판단 기록 대기'),el('small',`상품 담당: ${model(p.model)} · 승격 ${p.upgrades}회`));for(const a of p.actors)row.append(el('small',`${label(a.role)} · ${model(a)}${a.reason?' · '+a.reason:''}`));n.append(row);}

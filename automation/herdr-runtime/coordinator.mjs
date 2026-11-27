@@ -28,7 +28,7 @@ export async function coordinate({journal,backend,serverFactory=opts=>new CodexS
       if(['complete','blocked','source_exhausted'].includes(journal.data.status))throw Error('MISSION_ALREADY_FINISHED');
       if(journal.data.pendingModelUpgrade)throw Error('MODEL_UPGRADE_PENDING_END_TURN');
       journal.data.toolCalls=(journal.data.toolCalls||0)+1;journal.save();
-      if(journal.data.toolCalls>journal.data.mission.maxTurns*20)throw Error('COORDINATOR_TOOL_BUDGET');
+      if(!journal.data.mission.continuous&&journal.data.toolCalls>journal.data.mission.maxTurns*20)throw Error('COORDINATOR_TOOL_BUDGET');
       const args=typeof p.arguments==='string'?JSON.parse(p.arguments):p.arguments;
       if(p.tool==='request_model_upgrade'){
         if(p.threadId!==threadId)throw Error('ONLY_COORDINATOR_CAN_UPGRADE');
@@ -42,14 +42,14 @@ export async function coordinate({journal,backend,serverFactory=opts=>new CodexS
     check();server=serverFactory({cwd:journal.dir,config:{'agents.enabled':false},onTool:p=>{const result=toolQueue.then(()=>invoke(p));toolQueue=result.catch(()=>{});return result;}});
     server.on?.('notification',m=>{if(m.method==='item/completed'&&m.params.item.type==='agentMessage')journal.event('agent_message',{threadId:m.params.threadId,text:m.params.item.text?.slice(0,5000)});});
     await server.start();
-    const scopeInstructions=instructions+' Completion is defined by status.unit: inspected-sources counts durable source screening skips as completed inspections. A skip is not an independent review or a profitable candidate. If completed equals target, wait for worker exit then call finish complete, reporting skipped and reviewed counts honestly. Do not request replacement products or report blocked solely because all inspected sources were skipped.'+upgradeInstructions;
+    const scopeInstructions=instructions+(journal.data.mission.continuous?' This is continuous work until user STOP. There is no product count target. Analyze observed unseen products in batches of at most five; when the current ranking has no new candidates, wait and refresh its selected context later. Never call finish complete or source_exhausted. Do not repeatedly analyze the same source. If an external dependency is unavailable, use wait rather than claiming completion.':' Completion is defined by status.unit: inspected-sources counts durable source screening skips as completed inspections. A skip is not an independent review or a profitable candidate. If completed equals target, wait for worker exit then call finish complete, reporting skipped and reviewed counts honestly. Do not request replacement products or report blocked solely because all inspected sources were skipped.')+upgradeInstructions;
     const toolsHash=digest(coordinatorTools);
     if(journal.data.threadId&&journal.data.toolSchemaHash===toolsHash){await server.call('thread/resume',{threadId:journal.data.threadId,cwd:journal.dir,developerInstructions:scopeInstructions,model:selectedModel.model,sandbox:'read-only',approvalPolicy:'never',config:{model_reasoning_effort:selectedModel.effort}});threadId=journal.data.threadId;}
     else {const response=await server.startThread({instructions:scopeInstructions,tools:coordinatorTools,...selectedModel});threadId=response.thread.id;journal.event('model_session_started',{previousThreadId:journal.data.threadId,threadId,...selectedModel,effectiveModel:response.model||null,policyVersion:modelPolicy.version});journal.data.threadId=threadId;journal.data.toolSchemaHash=toolsHash;}
     journal.data.modelSelection=selectedModel;journal.save();
     journal.data.status='running';journal.save();await display('working','Autonomous sourcing');
     while(!finished()) {
-      check();if(journal.data.turns>=journal.data.mission.maxTurns)throw Error('COORDINATOR_TURN_BUDGET');
+      check();if(!journal.data.mission.continuous&&journal.data.turns>=journal.data.mission.maxTurns)throw Error('COORDINATOR_TURN_BUDGET');
       if(journal.data.pendingModelUpgrade){
         const upgrade=journal.data.pendingModelUpgrade;selectedModel=modelConfig(upgrade);
         const response=await server.startThread({instructions:scopeInstructions,tools:coordinatorTools,...selectedModel});

@@ -25,6 +25,9 @@ Herdr workspace
 # 무신사 현재 랭킹 설정에서 매입처 상품 5개 점검. 수익 후보 5개 확보 목표가 아니다.
 node automation/herdr-runtime/run.mjs start --dir=kream-runs/herdr-work-01 --target=5 --source=musinsa-ranking '--instruction=무신사 현재 랭킹에서 상품 5개를 자율 점검하고 KREAM과 POIZON 근거를 독립 검토해'
 
+# 중지 요청까지 무신사 랭킹의 새로운 상품을 계속 점검. 상품 수 목표 없음.
+node automation/herdr-runtime/run.mjs start --continuous --dir=kream-runs/herdr-continuous-01 --source=musinsa-ranking '--instruction=무신사 현재 랭킹의 새로운 상품을 계속 점검하고 KREAM과 POIZON 근거를 독립 검토해'
+
 # 상태와 중단
 node automation/herdr-runtime/run.mjs status --dir=kream-runs/herdr-work-01
 node automation/herdr-runtime/run.mjs stop --dir=kream-runs/herdr-work-01
@@ -42,6 +45,8 @@ node automation/herdr-runtime/run.mjs resume --dir=kream-runs/herdr-work-01 --ma
 일반 KREAM 후보 탐색은 `--source=kream-popularity`를 사용한다. 기존 인기순 커서·중복 DB를 유지하고 관측한 후보 중 다음 분석 대상을 AI가 고른다. 무신사는 현재 category/period/gender/age 설정의 all 목록을 읽고 별도 무신사 중복 기록을 사용한다. 기존 완료 상품을 다시 선택하지 않는다. 현재 무신사 모드는 선택된 랭킹 문맥만 다루며 모든 하위 카테고리로 자동 확장하지 않는다. 설정이 도중에 바뀌면 중단 원인으로 남긴다.
 
 `--target`은 1~500이며 필수다. 무신사는 점검한 매입처 상품 수, 일반 KREAM은 독립 검토가 완료된 상품 수다. 재고 없음·매칭 실패·조회 실패 건너뛰기는 무신사 점검 내역으로 남지만 수익 채택으로 집계하지 않는다. 수익 후보 N개 확보나 무기한 운영은 이 CLI의 목표 유형이 아니다. 턴 기본 한도는 100, 도구 호출 한도는 턴 한도의 20배다. 완료되지 않으면 complete로 꾸미지 않는다.
+
+`--continuous`는 사용자가 중지할 때까지 무신사 랭킹을 반복 확인한다. 내부 예약 단위는 최대 5개이며 상품 수 목표와 턴 한도를 적용하지 않는다. 이미 확인한 매입처 상품은 저장된 중복 기록으로 다시 배정하지 않는다. 현재 선택한 랭킹에 새 상품이 없으면 대기한 뒤 다시 확인한다. No1 브라우저 확장과 인증이 준비되지 않으면 작업은 `waiting_connection`으로 남고 백그라운드에서 재확인한다. 기존 유한 작업에는 이 옵션이 영향을 주지 않는다. 다른 연속 작업을 교체할 때만 `--replace-work=<기존 작업 ID>`를 명시한다.
 
 No1 브리지가 없으면 AI가 기존 로컬 서비스만 백그라운드로 시작할 수 있다. 브라우저 확장 연결, No1 인증, KREAM·무신사 인증이 필요하며 화면 조작으로 우회하지 않는다. 기존 미완료 작업과 충돌하면 자동으로 중단·덮어쓰기 하지 않는다.
 
