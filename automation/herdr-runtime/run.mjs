@@ -11,6 +11,14 @@ import {connection} from './connection.mjs';
 import {readRankingFeed} from '../no1-background/ranking-feed.mjs';
 import {BackgroundClient} from '../no1-background/client.mjs';
 const project=fileURLToPath(new URL('../../',import.meta.url));
+const resolutionScript=fileURLToPath(new URL('./exclusion-resolution-agent.mjs',import.meta.url));
+function launchResolutionWatch(dir){
+  const lock=read(path.join(dir,'exclusion-resolution.lock'));if(alive(lock?.pid))return;
+  const logDir=path.join(dir,'exclusion-resolution');fs.mkdirSync(logDir,{recursive:true});
+  const output=fs.openSync(path.join(logDir,'watch.log'),'a');
+  try{const child=spawn(process.execPath,[resolutionScript,`--dir=${dir}`,'--watch'],{cwd:project,windowsHide:true,detached:true,stdio:['ignore',output,output]});child.unref();}
+  finally{fs.closeSync(output);}
+}
 export async function startServer(session) {
   const h=new Herdr({session});try{await h.call('workspace','list');return h;}catch{}
   const child=spawn(executable(),['--session',session,'server'],{windowsHide:true,detached:true,stdio:'ignore'});
@@ -35,6 +43,7 @@ export async function main(argv=process.argv.slice(2)) {
     if(!pane||!workspace)throw Error('HERDR_WORKSPACE_RESPONSE_INVALID');
     Object.assign(journal.data,{paneId:pane,workspaceId:workspace,session});journal.save();
     await h.launch(pane,fileURLToPath(import.meta.url),['controller',`--dir=${dir}`,`--session=${session}`]);
+    if(mission.source==='musinsa-ranking')launchResolutionWatch(dir);
     console.log(JSON.stringify({status:'launch_requested',dir,workspace,pane,attach:`herdr --session ${session}`}));return;
   }
   if(command==='resume') {
@@ -47,7 +56,7 @@ export async function main(argv=process.argv.slice(2)) {
     journal.data.status='ready';delete journal.data.error;
     const h=await startServer(journal.data.session||session),created=await h.create(project,'Cream resumed');
     journal.data.workspaceId=created.workspace.workspace_id;journal.data.paneId=created.root_pane.pane_id;journal.save();
-    await h.launch(journal.data.paneId,fileURLToPath(import.meta.url),['controller',`--dir=${dir}`]);console.log('Resume requested');return;
+    await h.launch(journal.data.paneId,fileURLToPath(import.meta.url),['controller',`--dir=${dir}`]);if(journal.data.mission.source==='musinsa-ranking')launchResolutionWatch(dir);console.log('Resume requested');return;
   }
   if(command!=='controller')throw Error('USE_START_RESUME_STATUS_STOP_OR_CONTROLLER');
   const journal=new Journal(dir),release=lock(dir),h=new Herdr({session:journal.data.session||session});

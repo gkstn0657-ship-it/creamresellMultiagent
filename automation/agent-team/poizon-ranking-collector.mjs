@@ -27,16 +27,20 @@ export function bindPoizonSize(stock,market,option){
  if(matches.length!==1)return null;
  return {row:matches[0],evidence:{kind:market.isApparel?'exact-apparel-label':'explicit-region-label',sourceSize:option.size,marketSize:matches[0].size||matches[0].apparelSize||option.size,skuId:matches[0].skuId}};
 }
-export async function collectPoizonCandidate(candidate,{client,seenKreamIds=new Set()}={}){
+export async function collectPoizonCandidate(candidate,{client,seenKreamIds=new Set(),searchVariants=false}={}){
  const stock=await client.request('stock:check',{url:candidate.productUrl});
  if(!stock.combinedOptions?.some(available))return {status:'skipped',reason:'NO_AVAILABLE_STOCK'};
  const model=String(stock.makerNumber||'').trim();
  if(!model||model==='-')return {status:'skipped',reason:'SOURCE_MODEL_MISSING'};
  if(!/^[\p{L}\p{N}][\p{L}\p{N} ._()/+-]{0,99}$/u.test(model))return {status:'skipped',reason:'UNSUPPORTED_SOURCE_MODEL_FORMAT'};
- let cursor='1';const seen=new Set(),products=[];
- for(let i=0;i<3&&!seen.has(cursor);i++){
-  seen.add(cursor);const search=await client.request('market:poizon:search',{keyword:model,cursor});products.push(...search.products);
-  if(products.some(p=>matchPoizonOptions(stock,p).length)||!search.nextCursor)break;cursor=search.nextCursor;
+ const products=[],keywords=[model,...(searchVariants?[model.replace(/[\s-]+/g,''),model.replace(/-/g,' ')]:[])].filter((value,index,array)=>value&&array.indexOf(value)===index);
+ for(const keyword of keywords){
+  let cursor='1';const seen=new Set();
+  for(let i=0;i<3&&!seen.has(cursor);i++){
+   seen.add(cursor);const search=await client.request('market:poizon:search',{keyword,cursor});products.push(...search.products);
+   if(products.some(p=>matchPoizonOptions(stock,p).length)||!search.nextCursor)break;cursor=search.nextCursor;
+  }
+  if(products.some(p=>matchPoizonOptions(stock,p).length))break;
  }
  const matches=[...new Map(products.filter(p=>matchPoizonOptions(stock,p).length).map(p=>[p.spuId,p])).values()].sort((a,b)=>a.spuId.localeCompare(b.spuId,'en',{numeric:true}));
  if(!matches.length)return {status:'skipped',reason:'POIZON_EXACT_MODEL_NOT_FOUND'};
