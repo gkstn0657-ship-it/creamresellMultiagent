@@ -6,7 +6,7 @@ import {BackgroundClient} from '../../no1-background/client.mjs';
 import {control} from '../control-mcp.mjs';
 import {classifyError} from '../error-catalog.mjs';
 import {reopenWork,withWorkLock} from '../work-orders.mjs';
-import {herdrData,herdrAction,defaultRuns} from './herdr-data.mjs';
+import {herdrData,herdrAction,adoptedCandidate,defaultRuns} from './herdr-data.mjs';
 import {workspacePaths} from '../workspace-paths.mjs';
 
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -108,6 +108,9 @@ export function createDashboardServer({root=defaultRoot,workId,port=8875,start=s
  files.set('/agent-activity-ui.js','agent-activity-ui.js');
  files.set('/results-ui.js','results-ui.js');
  files.set('/exploration-ui.js','exploration-ui.js');
+ files.set('/herdr/candidate','candidate.html');
+ files.set('/candidate.js','candidate.js');
+ files.set('/candidate.css','candidate.css');
  const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8'};
  let starting=null;const managing=new Set();
  const server=http.createServer((req,res)=>{
@@ -135,6 +138,7 @@ export function createDashboardServer({root=defaultRoot,workId,port=8875,start=s
   }
   if(req.method!=='GET'){res.writeHead(405);res.end();return;}
   if(url.pathname==='/api/herdr'){res.setHeader('Content-Type','application/json');try{res.end(JSON.stringify(herdrData(runsRoot,url.searchParams.get('run'))));}catch(e){res.writeHead(404);res.end(JSON.stringify({error:e.message}));}return;}
+  if(url.pathname==='/api/herdr/candidate'){res.setHeader('Content-Type','application/json');try{res.end(JSON.stringify(adoptedCandidate(runsRoot,url.searchParams.get('run'),url.searchParams.get('product'))));}catch{res.writeHead(404);res.end(JSON.stringify({error:'ADOPTED_CANDIDATE_NOT_FOUND'}));}return;}
   if(url.pathname==='/health'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({app:'cream-musinsa-live-dashboard-v1'}));return;}
   if(url.pathname==='/api/state'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(liveDashboardData(root,workId)));return;}
   const file=files.get(url.pathname);if(!file){res.writeHead(404);res.end();return;}

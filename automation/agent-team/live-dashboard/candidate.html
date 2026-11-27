@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>채택 후보 상세 · Cream</title><link rel="stylesheet" href="/app.css"><link rel="stylesheet" href="/candidate.css"><script type="module" src="/candidate.js"></script></head>
+<body><div class="candidate-shell">
+<header class="candidate-top"><div class="brand">CREAM <span class="brand-light">/ SOURCING RESULT</span></div><a id="back" href="/herdr">← 관제실로 돌아가기</a></header>
+<main id="candidate-main"><div id="loading" class="candidate-loading" role="status">검수된 채택 후보를 확인하는 중입니다.</div>
+<div id="candidate-content" hidden>
+<section class="candidate-hero"><div class="candidate-eyebrow">INDEPENDENTLY REVIEWED · ADOPT CANDIDATE</div><div class="candidate-hero-row"><div><span class="candidate-pill">채택 후보 · 독립 검수 완료</span><h1 id="candidate-name"></h1><p id="candidate-identity"></p></div><div class="candidate-rank"><small>무신사 현재 랭킹</small><strong id="candidate-rank"></strong></div></div><div class="candidate-meta"><span id="candidate-reviewed"></span><span id="candidate-model"></span></div><p class="candidate-caution">조사 후보 판단입니다. 구매 승인이나 확정 수익을 뜻하지 않습니다.</p></section>
+<section class="candidate-overview"><article><small>연결된 옵션</small><strong id="candidate-options"></strong></article><article><small>확인한 시장</small><strong id="candidate-markets"></strong></article><article><small>수치 관측 시각</small><strong id="candidate-observed"></strong></article><article><small>미확인 사항</small><strong id="candidate-gaps"></strong></article></section>
+<section class="candidate-panel"><div class="candidate-heading"><div><p class="candidate-eyebrow">REVIEWED JUDGMENT</p><h2>채택 판단 이유</h2></div><a id="source-link" hidden target="_blank" rel="noopener noreferrer">무신사 상품 보기 ↗</a></div><p id="candidate-reason" class="candidate-reason"></p><p id="candidate-source"></p></section>
+<section class="candidate-panel"><div class="candidate-heading"><div><p class="candidate-eyebrow">MARKET EVIDENCE</p><h2>옵션별 판매 근거와 예상 마진</h2></div></div><p class="candidate-help">재고와 30일 판매량은 저장된 관측값입니다. 판매량의 기록·추정 구분과 수수료 근거를 함께 확인하세요.</p><div id="candidate-options-list" class="candidate-options-list"></div></section>
+<section class="candidate-panel"><div class="candidate-heading"><div><p class="candidate-eyebrow">OPEN QUESTIONS</p><h2>미확인·유의사항</h2></div></div><ul id="candidate-unresolved"></ul></section>
+</div><div id="candidate-error" class="candidate-error" role="alert" hidden></div></main>
+<footer><span>저장된 상품 판단과 원자료 연결 기준</span><span>CREAM / HERDR</span></footer>
+</div></body></html>

@@ -52,6 +52,15 @@ export function herdrData(root=defaultRuns,id){
  const agents=[agentActivity({id:state.threadId||'coordinator',role:'coordinator',model:state.modelSelection,events:state.history||[],live:controllerAlive,terminal:['complete','blocked','source_exhausted','stopped'].includes(state.status)}),...batches.flatMap(b=>[{id:b.runId,role:'worker',status:b.status==='complete'?'finished':b.alive?'working':'offline',live:b.alive,phase:b.status,model:null,paneId:b.paneId,events:[],message:b.error||null},...b.products.flatMap(p=>p.activities)])];
  return {runs,selected:id,agents,observedAt:new Date().toISOString(),policy:modelPolicy.defaults,mission:state.mission,status:state.status,controllerAlive,stopping,trusted,turns:state.turns,model:state.modelSelection||null,error:state.error||(!trusted?'DATA_ROOT_NOT_SUPPORTED':null),completed,reviewed,skipped,exploration:explorationStatus(batches),batches,events:(state.history||[]).slice(-30).reverse(),canStop:trusted&&(controllerAlive||batches.some(b=>b.alive)),canResume:trusted&&!controllerAlive&&!batches.some(b=>b.alive)&&!['complete','source_exhausted'].includes(state.status)};
 }
+export function adoptedCandidate(root=defaultRuns,id,productId){
+ if(typeof productId!=='string'||!/^(?:\d{1,12}|poizon-\d{1,18})$/.test(productId))throw Error('ADOPTED_CANDIDATE_NOT_FOUND');
+ const data=herdrData(root,id);
+ const products=(data.batches||[]).flatMap(b=>(b.products||[]).map(p=>({...p,batchId:b.runId}))).filter(p=>p.productId===productId&&p.status==='complete'&&p.verified&&p.decision==='adopt');
+ const product=products.sort((a,b)=>String(b.details?.at||'').localeCompare(String(a.details?.at||'')))[0];
+ if(!product)throw Error('ADOPTED_CANDIDATE_NOT_FOUND');
+ const source=data.exploration?.rows.find(r=>r.markets.some(m=>m.productId===productId))||null;
+ return {runId:id,productId,product:{batchId:product.batchId,name:product.details?.name||productId,platform:productId.startsWith('poizon-')?'POIZON':'KREAM',reason:product.reason,reviewedAt:product.details?.at||null,readiness:product.details?.readiness||null,sourceUrl:product.details?.sourceUrl||null,unresolved:product.details?.unresolved||[],options:product.details?.options||[],model:product.model,actors:product.actors||[],upgrades:product.upgrades||0},source:source?{sourceId:source.sourceId,rank:source.rank,name:source.name,url:source.url}:null};
+}
 export async function herdrAction(root,id,action,maxTurns){
  const data=herdrData(root,id);
  if(!['stop','resume'].includes(action))throw Error('INVALID_ACTION');

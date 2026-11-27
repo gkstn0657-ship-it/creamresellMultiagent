@@ -18,7 +18,7 @@ export function renderExploration(d){
   title.append(el('small',`${r.rank==null?'순위 미확인':r.rank+'위'} · 무신사 ${r.sourceId}`));
   const status=el('span',r.status==='skipped'?'수집 제외':r.status==='reviewed'?'검수 완료':r.status==='attention'?'확인 필요':r.status==='waiting'?'수집 대기':'판단 중','exploration-badge '+r.status);
   item.append(title,status);
-  const market=el('div',null,'exploration-market');for(const m of r.markets)market.append(el('span',`${m.productId.startsWith('poizon-')?'POIZON':'KREAM'} ${m.productId} · ${m.verified?(decisions[m.decision]||'검수 완료'):'검수 대기'}`,m.verified?'verified':''));
+  const market=el('div',null,'exploration-market');for(const m of r.markets){const adopted=m.verified&&m.decision==='adopt',node=el(adopted?'a':'span',`${m.productId.startsWith('poizon-')?'POIZON':'KREAM'} ${m.productId} · ${m.verified?(decisions[m.decision]||'검수 완료'):'검수 대기'}${adopted?' →':''}`,m.verified?'verified':'');if(adopted)node.href='/herdr/candidate?run='+encodeURIComponent(d.selected)+'&product='+encodeURIComponent(m.productId);market.append(node);}
   if(r.reason)item.append(el('p',r.reason,'exploration-reason'));
   if(market.childElementCount)item.append(market);
   return item;
