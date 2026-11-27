@@ -16,6 +16,17 @@ export const defaultRuns=fileURLToPath(new URL('../../../kream-runs/',import.met
 const read=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return null;}};
 const dirs=dir=>{try{return fs.readdirSync(dir,{withFileTypes:true}).filter(x=>x.isDirectory()&&!x.isSymbolicLink()).map(x=>x.name);}catch{return [];}};
 const safe=id=>typeof id==='string'&&/^[a-zA-Z0-9_-]+$/.test(id);
+function recoveredProducts(runDir,sourceId,retry){
+ const name=typeof retry?.batchDir==='string'?path.basename(retry.batchDir):'';
+ if(!new RegExp('^'+sourceId+'-\\d{10,16}$').test(name)||retry?.reviewed!==true)return [];
+ const base=path.join(runDir,'exclusion-resolution','rechecks',name),batch=read(path.join(base,'batch-state.json'))||{};
+ return (batch.results||[]).filter(result=>/^(?:\d{1,12}|poizon-\d{1,18})$/.test(String(result.productId))).flatMap(result=>{
+  let verified=false;try{verified=verifiedResult(base,result);}catch{}
+  if(!verified)return [];
+  const team=read(path.join(base,'judgments',result.productId,'team-state.json'))||{};
+  return [{productId:result.productId,batchId:name,status:result.status,decision:result.assessment?.decision,reason:result.assessment?.reason,verified,details:resultDetails(team,result),model:team.ownerModel||null,actors:(team.actors||[]).map(a=>({role:a.role,model:a.effectiveModel||a.requestedModel||a.model||null,effort:a.effort,reason:a.routingReason})),upgrades:team.modelUpgradeCount||0}];
+ });
+}
 export function herdrRuns(root=defaultRuns){
  return [...continuousRuns(path.join(root,'agent-teams')),...dirs(root).flatMap(id=>{if(!safe(id))return [];const state=read(path.join(root,id,'state.json'));try{validateMission(state?.mission);}catch{return [];}
  if(!Array.isArray(state.batches)||!state.session)return [];
@@ -54,17 +65,20 @@ export function herdrData(root=defaultRuns,id){
  for(const row of exploration.rows.filter(r=>r.status==='skipped')){
   const saved=read(path.join(dir,'exclusion-diagnostics','cases',row.sourceId+'.json'))||read(path.join(trustedRoot,row.batchId,'exclusion-diagnostics','cases',row.sourceId+'.json'));
   if(saved?.batchId===row.batchId&&saved.facts?.sourceId===row.sourceId&&saved.facts?.summaryCode===row.reason)row.diagnosis={kream:saved.facts.kream,poizon:saved.facts.poizon,confidence:saved.facts.confidence,agent:saved.agent};
+  const resolution=read(path.join(dir,'exclusion-resolution','cases',row.sourceId+'.json'));
+  if(resolution?.batchId===row.batchId&&resolution.basisHash===saved?.facts?.basisHash){const products=recoveredProducts(dir,row.sourceId,resolution.retry);row.resolution={status:resolution.status==='recovered'&&!products.length?'needs_attention':resolution.status,reason:resolution.reason,nextCheck:resolution.nextCheck,retryAt:resolution.retryAt,retry:resolution.retry||null,products};}
  }
  exploration.counts.diagnosed=exploration.rows.filter(r=>r.diagnosis?.agent?.status==='complete').length;
+ exploration.counts.recovered=exploration.rows.filter(r=>r.resolution?.status==='recovered').length;
  return {runs,selected:id,agents,observedAt:new Date().toISOString(),policy:modelPolicy.defaults,mission:state.mission,status:state.status,controllerAlive,stopping,trusted,turns:state.turns,model:state.modelSelection||null,error:state.error||(!trusted?'DATA_ROOT_NOT_SUPPORTED':null),completed,reviewed,skipped,exploration,batches,events:(state.history||[]).slice(-30).reverse(),canStop:trusted&&(controllerAlive||batches.some(b=>b.alive)),canResume:trusted&&!controllerAlive&&!batches.some(b=>b.alive)&&!['complete','source_exhausted'].includes(state.status)};
 }
 export function adoptedCandidate(root=defaultRuns,id,productId){
  if(typeof productId!=='string'||!/^(?:\d{1,12}|poizon-\d{1,18})$/.test(productId))throw Error('ADOPTED_CANDIDATE_NOT_FOUND');
  const data=herdrData(root,id);
- const products=(data.batches||[]).flatMap(b=>(b.products||[]).map(p=>({...p,batchId:b.runId}))).filter(p=>p.productId===productId&&p.status==='complete'&&p.verified&&p.decision==='adopt');
+ const products=[...(data.batches||[]).flatMap(b=>(b.products||[]).map(p=>({...p,batchId:b.runId}))),...(data.exploration?.rows||[]).flatMap(r=>r.resolution?.products||[])].filter(p=>p.productId===productId&&p.status==='complete'&&p.verified&&p.decision==='adopt');
  const product=products.sort((a,b)=>String(b.details?.at||'').localeCompare(String(a.details?.at||'')))[0];
  if(!product)throw Error('ADOPTED_CANDIDATE_NOT_FOUND');
- const source=data.exploration?.rows.find(r=>r.markets.some(m=>m.productId===productId))||null;
+ const source=data.exploration?.rows.find(r=>r.markets.some(m=>m.productId===productId)||r.resolution?.products?.some(p=>p.productId===productId))||null;
  return {runId:id,productId,product:{batchId:product.batchId,name:product.details?.name||productId,platform:productId.startsWith('poizon-')?'POIZON':'KREAM',reason:product.reason,reviewedAt:product.details?.at||null,readiness:product.details?.readiness||null,sourceUrl:product.details?.sourceUrl||null,unresolved:product.details?.unresolved||[],options:product.details?.options||[],model:product.model,actors:product.actors||[],upgrades:product.upgrades||0},source:source?{sourceId:source.sourceId,rank:source.rank,name:source.name,url:source.url}:null};
 }
 export async function herdrAction(root,id,action,maxTurns){

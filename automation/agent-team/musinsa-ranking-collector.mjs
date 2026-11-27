@@ -20,16 +20,24 @@ export function matchRankingModels(stock,items){
     return options.length?[{item,options}]:[];
   });
 }
-export function rankingSizeMatch(stock,market,sourceSize){
+export function rankingSizeMatch(stock,market,sourceSize,{allowExplicitMarketOption=false,sourceFirstOption=null}={}){
   // Scope this fallback to independently exact-model-matched products, one
   // source option with no size choice and one explicit market ONE SIZE option.
   const normal=matchMarketSize({...market,stock,sourceSize});if(normal)return normal;
+  if(allowExplicitMarketOption){
+    // The market's own option label is an explicit size assertion, even when
+    // its display size includes a gender prefix. Require a unique exact label.
+    const labelled=market.prices.filter(p=>sizeKey(p.option)===sizeKey(sourceSize));
+    if(labelled.length===1&&sourceFirstOption!==null&&sizeKey(sourceSize)===sizeKey(sourceFirstOption))return {
+      price:labelled[0],evidence:{kind:'same-market-option-label',sourceSize,marketSize:labelled[0].size,marketOption:labelled[0].option}
+    };
+  }
   if(stock.combinedOptions?.length===1&&['NONE','FREE','ONESIZE','OS'].includes(sizeKey(sourceSize))&&market.prices.length===1&&['ONESIZE','OS','FREE'].includes(sizeKey(market.prices[0].size)))return {
     price:market.prices[0],evidence:{kind:'exact-model-single-option',sourceSize,marketSize:market.prices[0].size}
   };
   return null;
 }
-export async function collectKreamCandidate(candidate,{client,onEvidence=()=>{},seenKreamIds=new Set()}={}){
+export async function collectKreamCandidate(candidate,{client,onEvidence=()=>{},seenKreamIds=new Set(),searchVariants=false,allowExplicitMarketOption=false}={}){
   const cache=new Map();const cached={status:()=>client.status(),request:async(cmd,payload={})=>{
     const key=JSON.stringify([cmd,payload]);if(!cache.has(key)){const data=await client.request(cmd,payload);cache.set(key,data);await onEvidence(cmd,payload,data);}return structuredClone(cache.get(key));
   }};
@@ -37,11 +45,16 @@ export async function collectKreamCandidate(candidate,{client,onEvidence=()=>{},
   if(!stock.combinedOptions?.some(available))return {status:'skipped',reason:'NO_AVAILABLE_STOCK'};
   const model=String(stock.makerNumber||'').trim();if(!model||model==='-')return {status:'skipped',reason:'SOURCE_MODEL_MISSING'};
   if(!/^[\p{L}\p{N}][\p{L}\p{N} ._()/+-]{0,99}$/u.test(model))return {status:'skipped',reason:'UNSUPPORTED_SOURCE_MODEL_FORMAT'};
-  const items=[],cursors=new Set();let cursor='1';
-  for(let page=0;page<3;page++){
-    if(cursors.has(cursor))break;cursors.add(cursor);
-    const search=await cached.request('mecro:inventory:search',{keyword:model,cursor});items.push(...search.items);
-    if(matchRankingModels(stock,items).length||!search.nextCursor)break;cursor=search.nextCursor;
+  const items=[];
+  const keywords=[model,...(searchVariants?[model.replace(/[\s-]+/g,''),model.replace(/-/g,' ')]:[])].filter((value,index,array)=>value&&array.indexOf(value)===index);
+  for(const keyword of keywords){
+    const cursors=new Set();let cursor='1';
+    for(let page=0;page<3;page++){
+      if(cursors.has(cursor))break;cursors.add(cursor);
+      const search=await cached.request('mecro:inventory:search',{keyword,cursor});items.push(...search.items);
+      if(matchRankingModels(stock,items).length||!search.nextCursor)break;cursor=search.nextCursor;
+    }
+    if(matchRankingModels(stock,items).length)break;
   }
   const unique=new Map(matchRankingModels(stock,items).map(m=>[m.item.productCode,m]));
   if(!unique.size)return {status:'skipped',reason:'EXACT_MARKET_MODEL_NOT_FOUND'};
@@ -53,7 +66,7 @@ export async function collectKreamCandidate(candidate,{client,onEvidence=()=>{},
   if(seenKreamIds.has(id))return {status:'skipped',reason:'DUPLICATE_KREAM_PRODUCT',kreamId:id};
   const prices=await cached.request('market:kream:prices',{productCode:id});
   const details=await cached.request('market:kream:details',{productCode:id,includeFastDelivery:true});
-  const options=match.options.filter(available).filter(o=>sizeKey(o.firstOption)===sizeKey(o.size)||sameColor(o.firstOption,details.colorway)).map(o=>({option:o,binding:rankingSizeMatch(stock,{prices:prices.prices,productUrl:candidate.productUrl,kreamId:id},o.size)})).filter(x=>x.binding);
+  const options=match.options.filter(available).filter(o=>sizeKey(o.firstOption)===sizeKey(o.size)||sameColor(o.firstOption,details.colorway)).map(o=>({option:o,binding:rankingSizeMatch(stock,{prices:prices.prices,productUrl:candidate.productUrl,kreamId:id},o.size,{allowExplicitMarketOption,sourceFirstOption:o.firstOption})})).filter(x=>x.binding);
   if(!options.length)return {status:'skipped',reason:'AVAILABLE_OPTION_NOT_BOUND',kreamId:id};
   // Compare every mapped in-stock size before selecting up to three richest
   // positive-margin options. This is numeric ordering, never AI discovery.
@@ -82,7 +95,7 @@ export async function collectKreamCandidate(candidate,{client,onEvidence=()=>{},
 // One source product -> one AI judgment, with independent platform evidence.
 // The shared cache avoids repeating stock/benefit reads. Existing ranking order
 // and persistent source position are unchanged.
-export async function collectRankingCandidate(candidate,{client,onEvidence=()=>{},seenKreamIds=new Set()}={}){
+export async function collectRankingCandidate(candidate,{client,onEvidence=()=>{},seenKreamIds=new Set(),searchVariants=false,allowExplicitMarketOption=false}={}){
  const cache=new Map(),failures=new Map();let lastCommand=null;
  const cached={status:()=>client.status(),request:async(cmd,payload={})=>{
   lastCommand=cmd;const key=JSON.stringify([cmd,payload]);
@@ -92,7 +105,7 @@ export async function collectRankingCandidate(candidate,{client,onEvidence=()=>{
  }};
  const checks={};
  for(const [platform,collect] of [['kream',collectKreamCandidate],['poizon',collectPoizonCandidate]]){
-  try{checks[platform]=await collect(candidate,{client:cached,seenKreamIds});}
+  try{checks[platform]=await collect(candidate,{client:cached,seenKreamIds,searchVariants,allowExplicitMarketOption});}
   catch(e){
    const mismatch=lastCommand?.startsWith('market:poizon:')&&['POIZON_PRICE_NOT_FOUND','NO1_IDENTITY_MISMATCH','NO1_OPTION_NOT_FOUND'].includes(e.message);
    if((!mismatch&&!isProductLookupFailure(lastCommand,e.message))||['stock:check','musinsa:product:benefit'].includes(lastCommand))throw e;
