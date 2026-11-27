@@ -107,6 +107,7 @@ export function createDashboardServer({root=defaultRoot,workId,port=8875,start=s
  const files=new Map([['/','index.html'],['/app.css','app.css'],['/app.js','app.js'],['/herdr','herdr.html'],['/herdr.js','herdr.js'],['/herdr.css','herdr.css']]);
  files.set('/agent-activity-ui.js','agent-activity-ui.js');
  files.set('/results-ui.js','results-ui.js');
+ files.set('/exploration-ui.js','exploration-ui.js');
  const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8'};
  let starting=null;const managing=new Set();
  const server=http.createServer((req,res)=>{
