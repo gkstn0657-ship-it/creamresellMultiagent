@@ -1,7 +1,10 @@
 import { locateDump } from './agents-offers.mjs';
+import { confirmedOptionBenefits } from './retailer-benefits.mjs';
 import { envelope, quote, quotedAmounts, normalizeSize, sizeInQuote, moneyInQuote, writeJson } from './agents-core.mjs';
 
 export const SOURCE_ADAPTERS = [
+  { name: 'naver-store', host: /^(?:brand|smartstore)\.naver\.com$/, sellerHeading: /판매자\s*정보/g },
+  { name: 'lotte-imall', host: /(^|\.)lotteimall\.com$/, sellerHeading: /판매자\s*(?:정보|상세정보)/g },
   { name: 'mustit', host: /(^|\.)mustit\.co\.kr$/, sellerHeading: /판매자\s*(?:정보|소개)/g },
   { name: 'ssg', host: /(^|\.)ssg\.com$/, sellerHeading: /판매자\s*(?:정보|상세정보)|업체\s*정보/g },
   { name: 'trenbe', host: /(^|\.)trenbe\.com$/, sellerHeading: /판매자\s*정보|셀러\s*정보/g },
@@ -20,6 +23,11 @@ export function extractPageEvidence(dump, file) {
     // offerText is captured from the selected option's visible row BEFORE quantity probing.
     const snapshot = typeof row.offerText === 'string' && row.offerText.length <= 500 && row.offerQuantity === 1 ? row.offerText : null;
     const lines = snapshot ? [{ text: snapshot, field: 'stockProbe.results.offerText' }] : body.split('\n').filter((s) => /사이즈|옵션|SIZE|선택/.test(s) && sizeInQuote(size, s)).map((text) => ({ text, field: 'text' }));
+    const confirmed = confirmedOptionBenefits(row, file, null, body, dump.at);
+    if (confirmed.evidence && confirmed.payablePrice > 0) {
+      offers[size] = { size, optionEvidence: confirmed.evidence, ...(shipping ? { shipping } : {}), extractedBy: adapter.name };
+      continue;
+    }
     const candidates = lines.filter(({ text }) => sizeInQuote(size, text) && quotedAmounts(text).length === 1 && /판매가|단가|가격|금액/.test(text) && !/할인|쿠폰|혜택|적립|이상|중고|총액/.test(text));
     const distinct = [...new Set(candidates.map((x) => quotedAmounts(x.text)[0]))];
     if (distinct.length !== 1 || distinct[0] <= 0) { issues.push(`OPTION_PRICE_UNRESOLVED:${size}`); continue; }

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {projectPython} from '../../../../kream-tools/project-python.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -57,6 +58,22 @@ test('identity is stable, seller-specific, and normalizes tracking-only URLs', (
   assert.equal(optionId(f.offers[0].id, ' s '), optionId(f.offers[0].id, 'S'));
   assert.equal(canonicalUrl('https://a.example/p?utm_source=x#y'), 'https://a.example/p');
   assert.equal(canonicalUrl('javascript:alert(1)'), '');
+});
+
+test('merchant terms keep card ceilings separate from evidenced discounts and newly earned points', async (t) => {
+  const f = fixture(t, 1), { file, dump } = addEvidence(f);
+  const terms = '국민카드 5% 청구할인\n-6,130원\n최대 적립 포인트 26,550원';
+  const sale = '옵션 S / 할인 전 상품가 120,000원 / 쿠폰 적용 완료 / 최종 상품가 110,000원 / 구매확정 시 기본 적립 1,100원';
+  const option = { ...dump.stockProbe.results[0], optionKey: 'S', offerQuantity: 1, offerText: sale };
+  writeJson(f.dir, file, { ...dump, text: dump.text + '\n' + terms, stockProbe: { ...dump.stockProbe, results: [option] } });
+  const { final } = await runAgents(f.dir, { now: NOW });
+  const row = final.rows.find(r => r['옵션ID']);
+  assert.equal(row['판정'], '후보'); assert.equal(row['매입가(원)'], 110000);
+  assert.equal(row['확인 쿠폰·즉시할인(원)'], 10000); assert.equal(row['확인 적립금(원)'], 1100);
+  assert.equal(row['예상순수익(원)'], 77000); assert.equal(row['포인트 포함 순수익(원)'], 78100);
+  assert.match(row['판매처 혜택·조건'], /국민카드 5% 청구할인 -6,130원/);
+  assert.match(row['판매처 혜택·조건'], /최대 적립 포인트 26,550원/);
+  assert.equal(row['혜택 근거'], file);
 });
 test('missing price evidence, cross-size reuse, unknown shipping and coupon conditions hold', (t) => {
   const f = fixture(t, 1), { ev, o, file, dump } = addEvidence(f);
@@ -200,9 +217,9 @@ test('Excel preserves separate sellers and exports verification IDs and review r
   const f = fixture(t, 0), a = { ...f.baseline.rows[0], '판정': '사람 검토', '제안ID': 'seller-a', '옵션ID': 'option-a', '검증사유코드': 'PRICE_UNCONFIRMED' }, b = { ...a, '제안ID': 'seller-b', '옵션ID': 'option-b' };
   writeJson(f.dir, 'export.json', { rows: [a, b], meta: {} });
   const exporter = fileURLToPath(new URL('../export-xlsx.py', import.meta.url)), out = path.join(f.dir, 'test.xlsx');
-  const r = spawnSync('python', ['-I', exporter, path.join(f.dir, 'export.json'), out], { encoding: 'utf8' });
+  const r = spawnSync(projectPython, ['-I', exporter, path.join(f.dir, 'export.json'), out], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
-  const check = spawnSync('python', ['-I', '-c', "import sys,openpyxl; w=openpyxl.load_workbook(sys.argv[1],read_only=True); s=w['사람 검토']; rows=list(s.values); h=list(rows[0]); assert len(rows)==3; assert set(r[h.index('옵션ID')] for r in rows[1:])=={'option-a','option-b'}; assert len(list(w['수익후보'].values))==1; w.close()", out], { encoding: 'utf8' });
+  const check = spawnSync(projectPython, ['-I', '-c', "import sys,openpyxl; w=openpyxl.load_workbook(sys.argv[1],read_only=True); s=w['사람 검토']; rows=list(s.values); h=list(rows[0]); assert len(rows)==3; assert set(r[h.index('옵션ID')] for r in rows[1:])=={'option-a','option-b'}; assert len(list(w['수익후보'].values))==1; w.close()", out], { encoding: 'utf8' });
   assert.equal(check.status, 0, check.stderr);
 });
 test('review metrics use the historical snapshot rather than a later promotion', async (t) => {

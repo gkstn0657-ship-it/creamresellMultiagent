@@ -9,9 +9,10 @@ import {groupProducts} from './packets.mjs';
 import {panelData} from './panel-data.mjs';
 import {workPolicy,workOrders,scopeStatus,startWork,reserveWork,stopWork,reopenWork,continueWorkUntilStopped,withWorkLock,explorationState} from './work-orders.mjs';
 import {startExploration,discoveryStatus} from './exploration.mjs';
+import {workspacePaths} from './workspace-paths.mjs';
 export const PANEL_URI='ui://cream/management-v2.html';
 const PANEL_FILE=fileURLToPath(new URL('./panel-ui/dist/panel.html',import.meta.url));
-const ROOT=fileURLToPath(new URL('../../kream-runs/agent-teams/',import.meta.url));
+const ROOT=workspacePaths().ledger;
 const BATCH=fileURLToPath(new URL('./batch.mjs',import.meta.url));
 const CONTINUOUS=fileURLToPath(new URL('./musinsa-continuous.mjs',import.meta.url));
 const WATCHDOG=fileURLToPath(new URL('./live-watchdog.mjs',import.meta.url));
@@ -162,7 +163,8 @@ export async function handleMcp(request,options={}) {
   if(request.method==='resources/templates/list')return {resourceTemplates:[]};
   if(request.method==='resources/read'){
     if(request.params?.uri!==PANEL_URI)throw Error('RESOURCE_NOT_FOUND');
-    return {contents:[{uri:PANEL_URI,mimeType:'text/html;profile=mcp-app',text:fs.readFileSync(PANEL_FILE,'utf8'),_meta:{ui:{prefersBorder:true,csp:{connectDomains:[],resourceDomains:[]}},'openai/ui':{availableDisplayModes:['inline','fullscreen']},'openai/widgetDescription':'Cream 상품별 AI 판단과 작업 제어 화면.','openai/widgetPrefersBorder':true}}]};
+    const html=fs.existsSync(PANEL_FILE)?fs.readFileSync(PANEL_FILE,'utf8'):(await import('./dot-host/assets.mjs')).panelHtml;
+    return {contents:[{uri:PANEL_URI,mimeType:'text/html;profile=mcp-app',text:html,_meta:{ui:{prefersBorder:true,csp:{connectDomains:[],resourceDomains:[]}},'openai/ui':{availableDisplayModes:['inline','fullscreen']},'openai/widgetDescription':'Cream 상품별 AI 판단과 작업 제어 화면.','openai/widgetPrefersBorder':true}}]};
   }
   if(request.method==='ping')return {};
   if(request.method!=='tools/call')throw Error('METHOD_NOT_SUPPORTED');

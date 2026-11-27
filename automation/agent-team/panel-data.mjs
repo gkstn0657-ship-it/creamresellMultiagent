@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {workspacePaths} from './workspace-paths.mjs';
 import {marginReport} from './margin-report.mjs';
 import {marketSchemas} from './market-schema.mjs';
-const ROOT=fileURLToPath(new URL('../../kream-runs/agent-teams/',import.meta.url));
+const ROOT=workspacePaths().ledger;
 const validId=id=>typeof id==='string'&&/^batch-[a-f0-9-]{36}$/.test(id);
 const read=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch(e){if(e.code==='ENOENT')return null;throw Error('SAVED_DATA_UNREADABLE');}};
 const alive=pid=>{if(!Number.isSafeInteger(pid)||pid<=0)return false;try{process.kill(pid,0);return true;}catch{return false;}};

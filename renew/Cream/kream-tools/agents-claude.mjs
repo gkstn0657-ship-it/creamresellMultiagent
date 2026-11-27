@@ -32,16 +32,22 @@ export async function invokeClaude(request, options = {}) {
   });
   if (!response.ok) throw new Error(`Claude API HTTP ${response.status}`);
   const message = await response.json();
+  const usage = message.usage;
+  const cached = usage?.cache_read_input_tokens;
+  const written = usage?.cache_creation_input_tokens;
+  const counted = value => Number.isSafeInteger(value) && value >= 0;
+  const measured = {
+    model:message.model || model,
+    input_tokens:counted(usage?.input_tokens) ? usage.input_tokens + (cached ?? 0) + (written ?? 0) : null,
+    cached_input_tokens:counted(cached) ? cached : null,
+    cache_write_input_tokens:counted(written) ? written : null,
+    output_tokens:counted(usage?.output_tokens) ? usage.output_tokens : null,
+  };
+  options.onUsage?.(measured);
   if (message.stop_reason !== 'end_turn') throw new Error(`Claude incomplete: ${message.stop_reason || 'unknown'}`);
   const block = message.content?.find(item => item.type === 'text');
   if (!block) throw new Error('Claude returned no text');
   const output = JSON.parse(block.text);
-  Object.defineProperty(output, '_usage', {value: {
-    model: message.model || model,
-    input_tokens: message.usage?.input_tokens || 0,
-    output_tokens: message.usage?.output_tokens || 0,
-    cache_creation_input_tokens: message.usage?.cache_creation_input_tokens || 0,
-    cache_read_input_tokens: message.usage?.cache_read_input_tokens || 0
-  }, enumerable: false});
+  Object.defineProperty(output, '_usage', {value:measured, enumerable:false});
   return output;
 }

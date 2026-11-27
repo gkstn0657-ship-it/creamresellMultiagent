@@ -1,0 +1,70 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+function readJson(file) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); }
+  catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return null; throw error; }
+}
+
+function usableSearch(dump, since) {
+  if (!dump || dump.blocked || !Number.isFinite(Date.parse(dump.at)) || Date.parse(dump.at) < since) return false;
+  if (!URL.canParse(dump.url)) return false;
+  const url = new URL(dump.url);
+  if (url.origin !== 'https://search.shopping.naver.com' || !url.pathname.startsWith('/search/') ||
+      url.searchParams.get('sort') !== 'price_asc' || !url.searchParams.get('query')) return false;
+  if (!/\d[\d,]*원/.test(dump.text || '')) return false;
+  return (dump.links || []).some(link => {
+    const address = typeof link === 'string' ? link : link?.h || link?.href || link?.url;
+    if (!address || !URL.canParse(address)) return false;
+    const item = new URL(address);
+    return item.protocol === 'https:' && /(^|\.)naver\.com$/.test(item.hostname) &&
+      (/\/(?:catalog|products?)\/\d+/.test(item.pathname) || item.hostname === 'cr.shopping.naver.com');
+  });
+}
+
+export function writeVerifiedWorkflowNote(project, activeBatchDir) {
+  const folder = path.join(project, '상품탐색결과');
+  const target = path.join(folder, '네이버-소싱-작업방식.md');
+  if (fs.existsSync(target)) return target;
+  const parts = path.relative(path.join(project, 'kream-runs'), activeBatchDir).split(path.sep);
+  if (!/^\d{8}-naver-[a-z0-9-]+$/.test(parts[0]) ||
+      parts.length > 2 || (parts[1] && !/^batch-\d+(?:-public)?$/.test(parts[1]))) return null;
+  const root = path.join(project, 'kream-runs', parts[0]);
+  if (!readJson(path.join(root, 'naver-live.json'))) return null;
+  const day = parts[0].slice(0,8);
+  const since = Date.parse(day.slice(0,4)+'-'+day.slice(4,6)+'-'+day.slice(6,8)+'T00:00:00+09:00');
+  const ids = readJson(path.join(activeBatchDir, 'k50-ids.json')) || [];
+  for (const id of ids) {
+    if (!/^\d+$/.test(String(id))) continue;
+    const kream = readJson(path.join(activeBatchDir, 'dump-K'+id+'.json'));
+    if (!kream || kream.blocked || !URL.canParse(kream.url) || !Number.isFinite(Date.parse(kream.at)) || Date.parse(kream.at)<since) continue;
+    const item = new URL(kream.url);
+    if(item.origin !== 'https://kream.co.kr' || item.pathname.replace(/\/$/,'') !== '/products/'+id) continue;
+    const search = ['-s','-s2'].map(t => readJson(path.join(activeBatchDir, 'dump-N'+id+t+'.json'))).find(d => usableSearch(d,since));
+    if (!search) continue;
+    fs.mkdirSync(folder,{recursive:true});
+    const time = new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',dateStyle:'long',timeStyle:'short'}).format(Date.parse(search.at));
+    const text = [
+      '# 네이버 가격비교 소싱 작업방식','',
+      '실무자가 KREAM에서 수요를 확인하고 네이버 가격비교에서 같은 옵션의 국내 매입처를 찾는다. 감사총무는 실행 기록과 실무자 판정을 독립적으로 확인한다.','',
+      '작업방식의 변경 사항은 [통합 작업방식](../docs/작업방식.md)에 기록한다.','',
+      '## 후보부터 매입 검토까지','',
+      '1. 기존 KREAM 조사는 원래 작업 번호로 계속한다. 이번 첫 네이버 배치는 저장된 주간 많이 산 상품 목록의 의류 8개다. 이후에는 KREAM에 배정된 의류·잡화를 순서대로 읽고 이미 조사한 ID를 제외한다.',
+      '2. 네이버 가격비교에서 품번으로 검색한다. 품번과 색상 코드 사이에 공백을 넣은 검색어를 사용하고, 필요한 경우 기존 대체 검색어로 다시 확인한다. 낮은 가격순으로 정렬하고 ‘추천 낮은 가격순’ 옵션을 해제한다.',
+      '3. 화면 위쪽 세 자리를 먼저 정한다. 해외직구나 모델·색상 불일치가 포함돼도 네 번째 카드로 채우지 않는다. 일치하는 카탈로그에서 판매처별 가격을 비교하고 판매 상세에서 품번·색상·사이즈·재고·판매 주체를 확인한다.',
+      '4. 구매처의 동일 옵션에서 할인 전 기준가와 실제 결제 금액을 대조한다. 쿠폰·즉시할인 금액, 적용 조건, 판매처 배송비, 혜택 근거를 옵션별로 기록한다. 회원 등급·카드·최소 주문금액·최대 한도·기간 등 확인되지 않은 조건은 안내 문구로 남긴다.',
+      '5. 같은 옵션의 KREAM 체결가에서 매입가와 매입 배송비, 판매 수수료와 발송비를 빼 현금 순이익과 마진율을 구한다. 적립이 확인되면 현금 순이익에 확인 적립금을 더한 순이익과 마진율도 따로 기록한다. 최대 적립 안내와 조건부 포인트는 확인 적립금에서 제외한다. 미확인 금액은 미확인으로 표시한다.',
+      '6. 같은 모델의 옵션은 엑셀에서 한 행에 모으고, 옵션별 금액·조건·근거를 같은 줄 순서로 맞춘다. 날짜별 Markdown에는 상품 판정과 옵션별 매입가·혜택을 기록한다. 제임스가 실무 검수를 하고 감사총무는 원본과 판정을 대조한다.','',
+      '## 실행 기록과 인계','',
+      '전용 Chrome 수집 확장이 요청을 순차 처리하고, 전용 릴레이가 실행 폴더에 결과를 저장한다. 차단·인증 화면이 나타나면 해당 경로의 상태와 마지막 상품을 남긴다. 실무자와 감사총무는 대시보드의 같은 실행 기록을 보고 조치하며, 기존 작업 번호를 유지한다.',
+      '', '배치별 원본은 실행 폴더에, 요약 표는 한국 날짜 기준 상품탐색결과/YYYY-MM/YYYY-MM-DD.md에 기록한다. 아래 시각은 네이버 결과가 실제로 수집된 시각이다. 엑셀 생성이나 수익 후보 확정은 각 배치의 결과에서 별도로 확인한다.','',
+      '- 첫 확인 사례 · KREAM 상품 '+id+' · '+time+' (한국 시간)',
+      '- [이번 실행 상태](../kream-runs/'+parts[0]+'/naver-live.json)',
+      '- [11월 7일 운영 기준](../renew/Cream/README-kream.md)',''
+    ].join('\n');
+    try { fs.writeFileSync(target,text,{encoding:'utf8',flag:'wx'}); }
+    catch(error) { if(error.code!=='EEXIST')throw error; }
+    return target;
+  }
+  return null;
+}

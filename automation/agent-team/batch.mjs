@@ -4,6 +4,7 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {collectPackets,validatePacket,groupProducts} from './packets.mjs';
 import {runTeam} from './run.mjs';
+import {GENERAL_PACKET_MESSAGE} from './roles.mjs';
 import {digest} from './store.mjs';
 import {writeJsonAtomic as write} from './atomic-json.mjs';
 import {marginReport} from './margin-report.mjs';
@@ -74,7 +75,7 @@ export async function runBatch({seeds,dir,concurrency=2,collect,collectDiscovere
             emit({type:'product_judgment_started',productId:packet.productId,packetId:packet.id});
             const result=await analyze({dir:productDir,packet,resume:Boolean(saved?.ownerThreadId),
               mission:{analysisProfile,objective:'이미 취합한 이 상품의 정보 묶음을 읽고 수익성·쿠폰·마일리지·수요·리스크를 종합하여 채택/보류/제외를 직접 판단한다. 구매처 미지원이나 매칭 미확인은 수익 없음이 아니라 자료 부족으로 보류한다.',product:packet.offers[0]||{kreamId:packet.productId},candidate:packet.candidate||null,offers:packet.offers,packetId:packet.id},
-              message:analysisProfile===MUSINSA_PROFILE?MUSINSA_MESSAGE:'먼저 team_state와 read_observation으로 수집된 상품 정보를 읽어라. 현재 근거로 계산 가능한 값과 미확인을 구분한다. 추가 정보가 결론을 바꿀 가능성이 있을 때만 보완 조사하라. 숫자 계산은 도구에 맡기고 판단은 직접 하라. 독립 검증 후 publish_assessment로 결과를 기록한다.',
+              message:analysisProfile===MUSINSA_PROFILE?MUSINSA_MESSAGE:GENERAL_PACKET_MESSAGE,
               onEvent:e=>emit({...e,productId:packet.productId})});
             row={productId:packet.productId,status:result.status,assessment:result.assessment};
           }

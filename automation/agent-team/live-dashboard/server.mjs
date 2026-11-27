@@ -7,9 +7,10 @@ import {control} from '../control-mcp.mjs';
 import {classifyError} from '../error-catalog.mjs';
 import {reopenWork,withWorkLock} from '../work-orders.mjs';
 import {herdrData,herdrAction,defaultRuns} from './herdr-data.mjs';
+import {workspacePaths} from '../workspace-paths.mjs';
 
 const here=path.dirname(fileURLToPath(import.meta.url));
-const defaultRoot=path.resolve(here,'../../../../Cream/kream-runs/agent-teams');
+const defaultRoot=workspacePaths().ledger;
 const read=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return null;}};
 const alive=pid=>{try{if(!Number.isSafeInteger(pid)||pid<1)return false;process.kill(pid,0);return true;}catch{return false;}};
 const safeWorkId=id=>typeof id==='string'&&/^work-[a-f0-9-]{36}$/.test(id);

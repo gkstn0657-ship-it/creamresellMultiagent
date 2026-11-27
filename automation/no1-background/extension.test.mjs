@@ -17,7 +17,7 @@ for (const origin of ['https://no1.certi.life', 'https://onebox.team']) test(`ex
       get: async keys => Object.fromEntries((Array.isArray(keys) ? keys : [keys]).map(key => [key, store[key]])),
       set: async values => { Object.assign(store, values); }, remove: async key => { delete store[key]; }
     }},
-    tabs: {query: async query => { assert.deepEqual(query.url, ['https://no1.certi.life/sourcing/*', 'https://onebox.team/sourcing/*']); return Array.from({length: tabCount}, (_, id) => ({id})); }},
+    tabs: {query: async query => { assert.deepEqual(query.url, ['https://onebox.team/sourcing/*']); return Array.from({length: tabCount}, (_, id) => ({id})); }},
     scripting: {executeScript: async options => {
       assert.equal(options.world, 'ISOLATED'); assert.deepEqual(options.target.frameIds, [0]);
       return [{result: options.func()}];
@@ -56,7 +56,7 @@ for (const origin of ['https://no1.certi.life', 'https://onebox.team']) test(`ex
 
   // A detached price-comparison page must not override the main session.
   const oldQuery=chrome.tabs.query,oldExecute=chrome.scripting.executeScript;
-  chrome.tabs.query=async()=>[{id:10,url:'https://no1.certi.life/sourcing/#/main/seller-integration'},{id:11,url:'https://no1.certi.life/sourcing/#/price-comparison'}];
+  chrome.tabs.query=async()=>[{id:10,url:'https://onebox.team/sourcing/#/main/seller-integration'},{id:11,url:'https://onebox.team/sourcing/#/price-comparison'}];
   chrome.scripting.executeScript=async options=>{assert.equal(options.target.tabId,10);assert.deepEqual(options.target.frameIds,[0]);return [{result:no1Token}];};
   job={id:'diagnostic',cmd:'connector:session-status',payload:{},deadline:Date.now()+5000};
   await waitFor(()=>localResults.length===2);

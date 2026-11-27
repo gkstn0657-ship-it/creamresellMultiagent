@@ -8,6 +8,9 @@
 - The user authorized model-placement experiments and configuration changes on 2026-11-26. `automation/agent-team/model-policy.json` is the central policy: coordinator Sol/high, owner Luna/medium, ordinary reviewer Luna/medium. These are provisional defaults from the small synthetic pilot documented in `automation/model-experiments/README.md`. Owners may request one evidence-backed upgrade to Sol/high; adopt, requested deep review, and same-basis rework use independent Sol/high review. Persist the selected model on resume. Live product execution still requires a user-specified quantity; synthetic verification does not establish a new product work order.
 
 ## Existing pipeline preferences
+- [박한수 에이전트 작업방식](docs/작업방식.md)이 사용자가 수정 요청한 운영 기준과 변경 이력의 원본이다. 작업 시작과 인계 시 관련 기준을 확인하고, 직접 받은 지속적 변경 요청은 한국 날짜와 함께 이 문서에 기록한다. 아래 기술 설명과 소싱별 실행 안내는 이 기준에 맞춰 사용한다.
+
+- The user's goal is agent-operated automation. For sourcing, carry the work through candidate discovery, evidence checks, independent review and dated reporting. Use the existing worker and background tools for repeatable work. Ask for user input when an account login or a missing decision genuinely requires it. Store verified sourcing results under `상품탐색결과/YYYY-MM/YYYY-MM-DD.md` in the desktop workspace using the Korea-local observation date. For Onebox sourcing, prioritize 시세 비교 and 무신사 랭킹 분석.
 
 - Validate work proactively, without waiting for the user to request tests. This is an explicit user preference recorded on 2026-11-10 (Asia/Seoul).
 - For code and integration changes, run relevant checks and, where available within the authorized scope, verify actual behavior. Fix discovered failures and rerun the affected checks before reporting completion.

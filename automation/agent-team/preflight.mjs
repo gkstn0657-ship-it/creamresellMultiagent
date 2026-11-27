@@ -1,14 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {fileURLToPath, pathToFileURL} from 'node:url';
+import {pathToFileURL} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
 import {BackgroundClient} from '../no1-background/client.mjs';
 import {CONNECTOR_VERSION} from '../no1-background/chrome-extension/protocol.mjs';
 import {codexExecutable} from '../codex-cli.mjs';
 import {workOrders, workSummary} from './work-orders.mjs';
-
-const ROOT = fileURLToPath(new URL('../../', import.meta.url));
+import {workspacePaths} from './workspace-paths.mjs';
 const safeError = error => /^[A-Z][A-Z0-9_]{2,100}$/.test(error?.message) ? error.message : 'CHECK_FAILED';
 export function inspectContinuity(root) {
   const file = path.join(root, 'discovery', 'discovery.sqlite');
@@ -42,7 +41,7 @@ export function inspectDotConfig(localAppData=process.env.LOCALAPPDATA) {
       remoteRoundTripVerified:false};
   } catch { return {configured:false,code:'DOT_CONFIG_INVALID'}; }
 }
-export async function preflight({root=path.join(ROOT,'kream-runs','agent-teams'),client=new BackgroundClient(),
+export async function preflight({root=workspacePaths().ledger,client=new BackgroundClient(),
   codex=checkCodex,dot=inspectDotConfig}={}) {
   const checks={},blockers=[];
   const fail=(area,code)=>blockers.push({area,code});

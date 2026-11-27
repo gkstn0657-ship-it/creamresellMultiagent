@@ -11,9 +11,8 @@
     "alarms"
   ],
   "host_permissions": [
-    "https://no1.certi.life/sourcing/*",
     "https://onebox.team/sourcing/*",
-    "https://relay.certi.life/*",
+    "https://relay.onebox.team/*",
     "http://127.0.0.1:8871/*"
   ],
   "background": {
@@ -25,6 +24,6 @@
     "default_popup": "popup.html"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src http://127.0.0.1:8871 https://relay.certi.life wss://relay.certi.life"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src http://127.0.0.1:8871 https://relay.onebox.team wss://relay.onebox.team"
   }
 }

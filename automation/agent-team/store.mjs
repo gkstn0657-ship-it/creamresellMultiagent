@@ -16,18 +16,35 @@ export class TeamStore {
       mission, ownerThreadId:null, actors:[], observations:[], calculations:[], reviews:[], assessment:null, events:[], toolCalls:0,
     };
     if (this.data.version !== 'cream-agent-team-v1') throw Error('TEAM_STATE_VERSION');
+    for(const actor of this.data.actors)actor.tokenUsage??=null;
     this.save();
   }
   save() { writeJsonAtomic(this.file,this.data); }
+  recordTokenUsage(threadId,total) {
+    const actor=this.data.actors.find(row=>row.threadId===threadId);
+    if(!actor||!total||!Number.isSafeInteger(total.totalTokens)||total.totalTokens<0)return;
+    const previous=actor.tokenUsage;
+    if(previous && previous.totalTokens>total.totalTokens)return;
+    const usage={};
+    for(const key of ['inputTokens','cachedInputTokens','outputTokens','reasoningOutputTokens','totalTokens']){
+      const value=total[key];
+      usage[key]=Number.isSafeInteger(value)&&value>=0?value:(previous?.totalTokens===total.totalTokens?previous[key]??null:null);
+    }
+    if(JSON.stringify(previous)!==JSON.stringify(usage)){actor.tokenUsage=usage;this.save();}
+  }
   event(type,data={}) {this.data.events.push({at:new Date().toISOString(),type,...data});this.save();}
   basis() {return digest({mission:this.data.mission,observations:this.data.observations.filter(x=>x.active!==false).map(x=>x.id),calculations:this.data.calculations.filter(x=>x.active!==false).map(x=>x.id)});}
-  observe(kind,payload,{mode='live',threadId=null,observedAt=new Date().toISOString()}={}) {
+  createObservation(kind,payload,{mode='live',threadId=null,observedAt=new Date().toISOString()}={}) {
     if(!Number.isFinite(Date.parse(observedAt)))throw Error('OBSERVATION_TIME_INVALID');
-    const entry={id:uid('obs'),kind,mode,threadId,observedAt,active:true,payload};
+    return {id:uid('obs'),kind,mode,threadId,observedAt,active:true,payload};
+  }
+  observe(kind,payload,options) {
+    const entry=this.createObservation(kind,payload,options);
     this.data.observations.push(entry);this.save();return entry;
   }
   read(id) {const item=[...this.data.observations,...this.data.calculations].find(x=>x.id===id);if(!item)throw Error('OBSERVATION_NOT_FOUND');return item;}
-  summary() {return {...this.data,margins:marginReport(this.data.observations),marketSchemas:marketSchemas(this.data.observations),observations:this.data.observations.filter(x=>x.active!==false).map(({payload,...x})=>({...x,summary:payload.summary||payload.queryStatus||payload.tool||null})),calculations:this.data.calculations.filter(x=>x.active!==false),events:this.data.events.slice(-12)};}
+  summary() {return {...this.data,actors:this.data.actors.map(({proposal,originalIdsDelivered,tokenUsage,...actor})=>actor),
+    margins:marginReport(this.data.observations),marketSchemas:marketSchemas(this.data.observations),observations:this.data.observations.filter(x=>x.active!==false).map(({payload,...x})=>({...x,summary:payload.summary||payload.queryStatus||payload.tool||null})),calculations:this.data.calculations.filter(x=>x.active!==false),events:this.data.events.slice(-12)};}
 }
 
 export function calculateScenario(args) {

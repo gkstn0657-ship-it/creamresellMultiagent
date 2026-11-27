@@ -89,12 +89,15 @@ export function evaluateBatches(ctx, final) {
       const pricingKnown = validBatchPricing(pricing, quantity, verified?.size || '*', dump, file);
       const conditionsKnown = ctx.policy.eligibilityMode !== 'option-evidence' || validBatchConditions(ev, quantity, verified, dump, file, ctx);
       if (!conditionsKnown) shippingKnown = false;
-      const scenario = batchScenario({ quantity, unitCost: row['매입가(원)'], salePrice: row['크림시세(원)'],
+      const singleUnitDiscount = !pricingKnown && quantity > 1 && row['확인 쿠폰·즉시할인(원)'] > 0;
+      const unitCost = singleUnitDiscount ? row['할인 전 옵션가(원)'] : row['매입가(원)'];
+      const scenario = batchScenario({ quantity, unitCost,  salePrice: row['크림시세(원)'],
         ...(pricingKnown ? { totalMerchandiseCost: pricing.totalMerchandiseCost, cashMerchandiseCost: pricing.cashMerchandiseCost, existingPointsUsed: pricing.existingPointsUsed } : {}),
         inboundShipping: shippingKnown ? delivery.value : quantity * (Number(row['판매처 배송비(원)']) || 0),
         stockCap: ev.stockCap, purchaseLimit: ev.purchaseLimit, salesCap: ev.salesCap,
         salesCapConfirmed: ev.salesCapConfirmed, salesCapEvidence: ev.salesCapEvidence,
         offerVerified: row['검증상태'] === 'verified', pointsQuote: ev.pointsByQuantity?.[quantity] }, ctx.policy);
+      if (singleUnitDiscount) scenario.discountBasis = '복수 수량에는 1개용 쿠폰을 반복 적용하지 않고 할인 전 상품가로 계산';
       if (!shippingKnown) { scenario.issues.push('해당 수량의 매입 배송비 근거 미확인'); scenario.status = 'hold'; }
       if (!conditionsKnown) { scenario.issues.push('수량·구매 제한·동일 옵션 수요 근거 미확인'); scenario.status = 'hold'; }
       if (ctx.policy.eligibilityMode === 'option-evidence' && !pricingKnown) {

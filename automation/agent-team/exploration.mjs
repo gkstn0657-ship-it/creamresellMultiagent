@@ -10,6 +10,7 @@ import {selectNext} from './discovery-feed.mjs';
 import {groupProducts} from './packets.mjs';
 import {digest} from './store.mjs';
 import {runBatch,prepareBatch} from './batch.mjs';
+import {syncDailyReports} from './daily-report.mjs';
 const read=file=>fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):null;
 const batchId=(workId,index)=>'batch-'+crypto.createHash('sha256').update(`discovery-v1:${workId}:${index}`).digest('hex').slice(0,32).replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5');
 export const explorationDir=(root,id)=>{if(!/^work-[a-f0-9-]{36}$/.test(id||''))throw Error('INVALID_WORK_ID');return path.join(root,'explorations',id);};
@@ -21,6 +22,7 @@ export async function startExploration(root,{workId,resume=false},options={}){
   if(['profitable-results','inspected-sources'].includes(work.scopeMode))throw Error('USE_MUSINSA_PROFIT_RUNNER');
   if(work.status==='stopped'){if(!resume)throw Error('USER_WORK_SCOPE_REQUIRED');reopenWork(root,workId);work=workOrders(root).find(w=>w.id===workId);}
   const summary=workSummary(root,work),prior=explorationState(root,workId);
+  if(resume&&prior?.status==='complete'&&!prior.workerAlive)syncDailyReports(root,workId);
   if(prior?.workerAlive||prior?.status==='complete')return {...prior,reused:true,launched:false};
   if(prior&&!resume)return {...prior,reused:true,launched:false,requiredAction:'Resume this same work explicitly; do not create replacement work.'};
   if(workOrders(root).some(w=>workSummary(root,w).activeRunIds.length||explorationState(root,w.id)?.workerAlive))throw Error('ACTIVE_BATCH_EXISTS');
@@ -50,6 +52,16 @@ export async function runExploration({root,workId,feed,executeBatch=runBatch,mod
  const stop=()=>fs.existsSync(path.join(dir,'STOP'))||workOrders(root).find(w=>w.id===workId)?.status==='stopped';
  const state={workId,status:'discovering',runtimeDiscoveryAI:false,startedAt:new Date().toISOString(),mode,batches:[]};
  const save=()=>write(path.join(dir,'state.json'),state);
+ const report=runId=>{
+  if(mode!=='live')return;
+  try{
+   syncDailyReports(root,workId,runId);
+   if(!runId)delete state.dailyReportError;
+  }catch(error){
+   state.dailyReportError=String(error.message).slice(0,350);
+   onEvent({type:'daily_report_error',runId,error:state.dailyReportError});
+  }
+ };
  let prefetch=null,abortPrefetch=false;
  const startPrefetch=currentId=>{
   if(!prefetchBatch||prefetch||stop())return;
@@ -76,6 +88,7 @@ export async function runExploration({root,workId,feed,executeBatch=runBatch,mod
   })().catch(e=>({error:e.message}));
  };
  try{
+  report();
   save();
   while(!stop()){
    const work=workOrders(root).find(w=>w.id===workId);if(!work)throw Error('USER_WORK_SCOPE_REQUIRED');
@@ -99,6 +112,7 @@ export async function runExploration({root,workId,feed,executeBatch=runBatch,mod
    });
    state.status='running_batch';state.discovery=store.status();save();
    const result=await executeBatch({seeds,dir:batchDir,concurrency:2,resume:Boolean(pending),mode,onEvent,onCollected:()=>startPrefetch(id)});
+   if(result.status==='complete')report(id);
    state.batches.push({runId:id,status:result.status,productCount:seeds.length});save();
    if(result.status!=='complete')abortPrefetch=true;
    const prepared=await prefetch;prefetch=null;delete state.prefetchRunId;save();

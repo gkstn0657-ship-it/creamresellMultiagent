@@ -1,3 +1,4 @@
+import {fileURLToPath} from 'node:url';
 // 결과 품질 점검 (2026-11-07): 수집은 멈추지 않았는데 결과가 조용히 틀리는 경우를 잡는다.
 //  예: 네이버 화면 구조가 바뀌어 카드를 0개 읽음, 카탈로그 행 0개, 판매처 재고를 거의 못 읽음, 말이 안 되는 수익률.
 // 사용: node kream-tools/quality.mjs <run-dir>   → 전체 점검 결과 출력 + <run-dir>/quality.json
@@ -61,7 +62,7 @@ export function qualityAll(dir) {
 // 한 줄 요약(run-all 로그용): "품질경보(주의) 단계: 메시지" 형식
 export const qualityLines = (q) => q.issues.map((i) => `${i.level === 'fail' ? '품질경보(중단)' : '품질경보(주의)'} ${q.stage}: ${i.msg}`);
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))) {
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const dir = process.argv[2]; if (!dir) { console.error('사용: node kream-tools/quality.mjs <run-dir>'); process.exit(1); }
   const r = qualityAll(dir);
   for (const p of r.parts) { console.log(`[${p.level.toUpperCase()}] ${p.stage} ${JSON.stringify(p.stats)}`); for (const l of qualityLines(p)) console.log('   ' + l); }

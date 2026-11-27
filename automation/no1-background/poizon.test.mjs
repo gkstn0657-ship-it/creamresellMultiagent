@@ -15,7 +15,7 @@ test('Poizon projection removes credentials and rejects mismatched price identit
 });
 test('Poizon reads category fees and its separate tax setting without KREAM tax contamination',()=>{
  const old={location:globalThis.location,localStorage:globalThis.localStorage};
- globalThis.location={origin:'https://no1.certi.life',pathname:'/sourcing/'};
+ globalThis.location={origin:'https://onebox.team',pathname:'/sourcing/'};
  globalThis.localStorage={getItem:k=>({'priceCompareFee.v2':JSON.stringify({schemaVersion:4,poizon:{category:'goods',goods:{rate:'14',minFee:'18000',maxFee:'45000'}}}),'market:taxMode':'true','market:poizonTaxMode':'false'})[k]||null};
  try{const d=projectData('market:poizon:margin-settings',readPoizonMarginSettings());assert.equal(d.taxMode,false);assert.equal(d.fees.goods.rate,14);assert.equal(d.fees.apparelShoes.minFee,15000);}finally{for(const [k,v]of Object.entries(old)){if(v===undefined)delete globalThis[k];else globalThis[k]=v;}}
 });

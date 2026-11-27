@@ -38,5 +38,9 @@ bookmarks*.html
 chrome-activity-log.md
 TRANSFER-MANIFEST.json
 sourcing-runtime.json
+/sourcing-policy.json
+/n8n-agent-cream-this-pc.json
+/상품탐색결과/20??-??/
+/상품탐색결과/.append.lock
 .DS_Store
 Thumbs.db

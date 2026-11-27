@@ -46,7 +46,7 @@ for (const p of k50) {
     if (pick) { buy = pick.price; mall = pick.mall; link = fx.url || pick.link; confirmed = fx.isProductPage; why = fx.why; if (pick.code.codeType === 'spacing') codeNote = pick.code.codeNote; ship = pick.code.shipFee ?? 0; shipUnk = pick.code.shipFee == null; } }
   else if (ct && ct.trustedMin) { buy = ct.trustedMin.price; mall = ct.trustedMin.mall; link = ct.trustedMin.link || ''; if (ct.trustedMin.codeType === 'spacing') codeNote = ct.trustedMin.codeNote; ship = ct.trustedMin.shipFee ?? 0; shipUnk = ct.trustedMin.shipFee == null; }
   else { const single = c.matched.filter((m) => !m.isCatalog && !m.overseas && m.keyMatch && m.colorMatch !== false && !/중고/.test(m.title)).sort((a, b) => a.price - b.price)[0]; if (single) { buy = single.price; mall = (single.topMalls && single.topMalls[0] && single.topMalls[0].mall) || '판매처 미표시'; link = single.link; if (single.codeType === 'spacing') codeNote = single.codeNote; ship = single.shipFee ?? 0; shipUnk = single.shipFee == null; } }
-  if (codeNote) flags.push('ⓢ코드 띄어쓰기 차이'); if (shipUnk) flags.push('⚠배송비 미확인(0원으로 계산)'); r['특별표시'] = flags.join(' · ');
+  if (codeNote) flags.push('ⓢ코드 띄어쓰기 차이'); if (shipUnk) flags.push('⚠배송비 미확인'); r['특별표시'] = flags.join(' · ');
   if (!buy) { const used = c.matched.filter((m) => /중고/.test(m.title)).length; rows.push({ ...r, '사유': ct ? (ct.usable === 0 ? '카탈로그 매물의 모델·색상 코드 불일치' : '모델·색상 일치 매물이 신뢰 판매처에 없음') : used ? `신품 매물 없음(중고 ${used}건)` : '모델 일치하나 색상 일치 신품 매물 없음' }); continue; }
   // 2026-11-08: 백화점·대형몰 등 신뢰 판매처 목록(TRUST)에 없으면 후보로 보지 않고 제외한다(소형몰·미표시 판매처는 더 이상 "참고"로 포함하지 않음)
   if (!TRUST.test(mall)) { rows.push({ ...r, '매입가(원)': buy, '판매처 배송비(원)': ship, '판매처': mall, '판매처 링크': link, '사유': `제외: 신뢰 판매처 목록에 없는 판매처(${mall || '미표시'}) — 백화점·대형몰이 아니거나 확인 불가` }); continue; }
@@ -59,6 +59,10 @@ for (const p of k50) {
   // 고점권(조건부) & 수익률 15% 미만: 제외하지 않고 조건을 표시해 포함 (2026-11-07)
   if (/조건부/.test(ch.판단) && pct > 0 && pct < 15) { flags.push(`⚠고점권(${ch.분류}): 수익률 15% 미만`); r['특별표시'] = flags.join(' · '); }
   const fill = { '매입가(원)': buy, '판매처 배송비(원)': ship, '판매처': mall, '판매처 링크': link, '예상순수익(원)': n, '수익률(%)': pct, '최대 적립 포인트(원)': pt || '', '포인트 포함 순수익(원)': pt ? nP : '', '포인트 포함 수익률(%)': pt ? pctP : '', '차트 분류': ch.분류, '차트 판단': `${ch.판단} (위험점수 ${ch.점수})`, '차트 근거': r['차트 근거'], '최근30일 체결': ch.지표.최근30일체결 ?? '' };
+  if (shipUnk) {
+    rows.push({...r,...fill,'판매처 배송비(원)':'미확인','예상순수익(원)':'','수익률(%)':'','포인트 포함 순수익(원)':'','포인트 포함 수익률(%)':'','판정':'사람 검토','사유':'판매처 배송비를 확인할 수 없어 순이익을 확정하지 않았습니다.'});
+    continue;
+  }
   if (n <= 0) {
     const screen = screenListing(p, { title: p.title, price: buy, shipFee: shipUnk ? null : ship, keyMatch: true }, readJson(dir, `dump-K${id}.json`), ctx.policy, ctx.now);
     const option = screen.potentialOptions[0];

@@ -4,6 +4,7 @@ import {spawn} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {startWork,workOrders,workSummary,withWorkLock} from './work-orders.mjs';
 import {writeJsonAtomic as write} from './atomic-json.mjs';
+import {workspacePaths} from './workspace-paths.mjs';
 
 export async function startMusinsaInspection(root,args){
  return withWorkLock(root,async()=>{
@@ -23,7 +24,7 @@ export async function startMusinsaInspection(root,args){
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href){
  const arg=n=>process.argv.find(v=>v.startsWith(`--${n}=`))?.slice(n.length+3);
- const root=arg('root')?path.resolve(arg('root')):fileURLToPath(new URL('../../kream-runs/agent-teams/',import.meta.url));
+ const root=arg('root')?path.resolve(arg('root')):workspacePaths().ledger;
  const args=arg('work')?{workId:arg('work')}:{targetSources:Number(arg('count')),userInstruction:arg('instruction'),requestId:arg('request'),...(arg('plan')?{sourcePlan:JSON.parse(fs.readFileSync(path.resolve(arg('plan')),'utf8'))}:{})};
  console.log(JSON.stringify(await startMusinsaInspection(root,args),null,2));
 }

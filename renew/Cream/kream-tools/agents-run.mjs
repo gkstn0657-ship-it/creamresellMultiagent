@@ -5,7 +5,7 @@ import { context, readJson, writeJson, envelope, hash, acquireRunLock } from './
 import { collectOffers, verifyOffers, planFallback } from './agents-offers.mjs';
 import { verifySellers } from './agents-sellers.mjs';
 import { auditFinal } from './agents-audit.mjs';
-import { trackOutcomes } from './agents-outcomes.mjs';
+import { outcomeReviewRows,trackOutcomes } from './agents-outcomes.mjs';
 import { recordIncident } from './agents-incidents.mjs';
 import { reviewWithLlm, applyLlmReview } from './agents-llm.mjs';
 import { autoEvidence } from './agents-extract.mjs';
@@ -13,6 +13,28 @@ import { evaluateBatches } from './agents-batch.mjs';
 import { roleRules } from './agents-lifecycle.mjs';
 import { runRoleAi,skipRoleAi,safeChecks,applyCheckReview,currentReview,teamSummary } from './agents-team.mjs';
 import { invokeClaude,claudeModelForRole } from './agents-claude.mjs';
+
+function collectionCoverage(ctx, offers) {
+  const facts = readJson(ctx.dir,'facts.json',{});
+  const seeds = readJson(ctx.dir,'k50-ids.json',[]);
+  const captured = new Set(ctx.products.map(product=>String(product.id)));
+  const missingProducts = seeds.filter(id=>!captured.has(String(id)));
+  const expectedSearch = new Set(readJson(ctx.dir,'n-eligible.json',[]).map(String));
+  for (const job of ctx.jobs) if (/^N\d+-s$/.test(job.id)) expectedSearch.add(job.id.slice(1,-2));
+  const detailJobs = ctx.jobs.filter(job=>/^N\d+-prod$/.test(job.id));
+  const missingSearch = [...expectedSearch].filter(pid=>{
+    const cards = ctx.cards[pid];
+    return !cards || !(cards.inspectedSlots || cards.cards || cards.matched?.length);
+  }).map(pid=>'N'+pid+'-s');
+  const unavailableDetails = detailJobs.filter(job=>{
+    const fact = facts[job.id];
+    return !fact || fact.blocked || fact.isProductPage === false || !fact.url;
+  }).map(job=>job.id);
+  const boundPids = new Set(offers.map(offer=>String(offer.pid)));
+  const unboundDetails = detailJobs.filter(job=>facts[job.id]?.url && !facts[job.id]?.blocked && facts[job.id].isProductPage !== false && !boundPids.has(job.id.slice(1,-5))).map(job=>job.id);
+  return {offers:offers.length,missingProducts,missingSearch,unavailableDetails,unboundDetails,
+    needsAttention:Boolean(missingProducts.length || missingSearch.length || unavailableDetails.length || unboundDetails.length)};
+}
 
 export function prepareAgents(dir, options = {}) {
   const ctx = context(dir, options), offers = collectOffers(ctx), automatic = autoEvidence(ctx, offers);
@@ -36,8 +58,11 @@ export async function prepareAgentTeam(dir, options = {}) {
     if (explicit.maxRoleAiInputChars == null) ctx.policy.maxRoleAiInputChars = 1500000;
   }
   const mode = { ...options,replay:options.replay === true };
-  if (options.efficientAi) skipRoleAi(ctx,'error_manager','incident rules already recorded');
-  else await runRoleAi(ctx,'error_manager',[{id:'operation',status:readJson(dir,'incident.json')?.current?.kind || 'OK',offers:offers.length}],mode);
+  prepared.coverage = collectionCoverage(ctx,offers);
+  const coverage = prepared.coverage;
+  if (options.efficientAi && !coverage.needsAttention) skipRoleAi(ctx,'error_manager','incident rules already recorded');
+  else await runRoleAi(ctx,'error_manager',[{id:'operation',status:readJson(dir,'incident.json')?.current?.kind || 'OK',
+    offers:offers.length,missingProducts:coverage.missingProducts.length,missingSearch:coverage.missingSearch.length,unavailableDetails:coverage.unavailableDetails.length,unboundDetails:coverage.unboundDetails.length}],mode);
   const offerReview = await runRoleAi(ctx,'offer_verifier',safeChecks(verified),mode);
   applyCheckReview(verified,offerReview);
   const sellerReview = options.efficientAi && sellers.every(s => s.status === 'verified')
@@ -75,11 +100,7 @@ export async function runAgents(dir, options = {}) {
   let review = null;
   if (options.roleAi) review = await runRoleAi(ctx,'final_auditor',safeChecks(readJson(dir,'audit.json').items.filter(i => !options.efficientAi || i.status !== 'excluded')),options);
   else if (options.llm) review = await reviewWithLlm(ctx, readJson(dir, 'audit.json'), options);
-  if (options.roleAi) {
-    const existing = readJson(dir,'outcomes.json',{});
-    if (options.efficientAi) skipRoleAi(ctx,'outcome_tracker','deterministic snapshot and due-date rules');
-    else await runRoleAi(ctx,'outcome_tracker',[{id:'outcomes',phase:'precommit',rows:final.rows.length,reviewedCandidates:final.rows.filter(r => r['판정'] === '후보').length,recordedSnapshots:existing.snapshots?.length || 0,due:existing.due?.length || 0,changesApplied:false}],options);
-  }
+  if (options.roleAi) await runRoleAi(ctx,'outcome_tracker',outcomeReviewRows(ctx,final),options);
   const completedAt = options.clock ? options.clock() : options.now || new Date().toISOString();
   if (completedAt !== ctx.now || options.roleAi) {
     // AI review can outlive a price/stock snapshot. Re-run mandatory checks at commit time.
@@ -111,15 +132,18 @@ export async function runAgents(dir, options = {}) {
   // All model calls finish before the last freshness check and immutable snapshot.
   if (options.roleAi) {
     const team = teamSummary(ctx);
-    if (!options.replay && !team.roles.every(r => ['done','skipped_by_policy'].includes(r.ai))) {
+    if (!options.replay && !team.aiComplete) {
       for (const row of final.rows.filter(r => r['판정'] === '후보')) { row['판정']='사람 검토';row['검증상태']='hold';row['검증사유코드'] += ' · AGENT_TEAM_INCOMPLETE';row['사유'] += ' / 필수 6개 에이전트 팀 실행 미완료'; }
     }
   }
   const outcomes = roleRules(ctx,'outcome_tracker',() => trackOutcomes(ctx,final));
-  if (options.roleAi) final.meta.에이전트팀 = teamSummary(ctx);
-  final.meta.성과스냅샷수 = outcomes.snapshots; final.meta.AI검토 = options.roleAi ? options.replay ? '6역할 재생(모델 미호출)' : options.efficientAi ? `6개 규칙 역할 + ${options.providerId === 'claude' ? 'Claude API' : 'Codex CLI'} 선택 호출` : '6개 역할: gpt-6.1-sol / high' : options.llm ? 'Codex CLI: gpt-6.1-sol / high' : '규칙 검증(LLM 미호출)';
+  if (options.roleAi) {
+    final.meta.에이전트팀 = teamSummary(ctx);
+    final.meta.수집근거 = collectionCoverage(ctx,prepared.offers);
+  }
+  final.meta.성과스냅샷수 = outcomes.snapshots; final.meta.AI검토 = options.roleAi ? options.replay ? '6역할 재생(모델 미호출)' : options.efficientAi ? `6개 규칙 역할 + ${options.providerId === 'claude' ? 'Claude API' : 'Codex CLI'} 선택 호출` : '대상 역할: gpt-6.1-sol / high' : options.llm ? 'Codex CLI: gpt-6.1-sol / high' : '규칙 검증(LLM 미호출)';
   writeJson(dir, 'final-all.json', final);
-  writeJson(dir, 'agent-state.json', envelope(ctx, [], { status: options.roleAi && !options.replay && !teamSummary(ctx).complete ? 'needs-attention' : 'done', inputHash: hash([prepared.offers, ctx.evidence, ctx.policy]),
+  writeJson(dir, 'agent-state.json', envelope(ctx, [], { status: options.roleAi && !options.replay && (!final.meta.에이전트팀.complete || final.meta.수집근거.needsAttention) ? 'needs-attention' : 'done', coverage:final.meta.수집근거,inputHash: hash([prepared.offers, ctx.evidence, ctx.policy]),
     counts: { offers: prepared.offers.length, options: prepared.verified.length, candidates: final.rows.filter((r) => r['판정'] === '후보').length, review: final.rows.filter((r) => r['판정'] === '사람 검토').length, fallbackPending: prepared.fallback.jobs.length } }));
   return { ...prepared, final };
   } catch (error) {

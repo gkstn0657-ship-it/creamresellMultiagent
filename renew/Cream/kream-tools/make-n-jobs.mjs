@@ -3,11 +3,12 @@
 import fs from 'node:fs'; import path from 'node:path';
 const dir = process.argv[2]; const useQ2 = process.argv[3] === 'q2';
 const k = JSON.parse(fs.readFileSync(path.join(dir, 'k50.json'), 'utf-8')); const j = JSON.parse(fs.readFileSync(path.join(dir, 'jobs.json'), 'utf-8'));
-const collab = /슈프림|뉴발란스|포터|Supreme|New Balance|Porter/i; const acts = [{ wait: 1500 }, { toggleOff: '추천 낮은 가격순' }, { noScroll: true }];   // 2026-11-07: 상위 3개 카드만 보므로 스크롤 생략(요청 수·시간 감소)
-const elig = k.filter((o) => o.model && !collab.test(o.title) && o.n >= 10);   // 2026-11-07: 시세 15만원 하한 삭제(마진 양수면 모두 포함)
+const collab = /슈프림|포터|Supreme|Porter/i; const acts = [{ wait: 1500 }, { toggleOff: '추천 낮은 가격순' }, { noScroll: true }];   // 2026-11-07: 상위 3개 카드만 보므로 스크롤 생략(요청 수·시간 감소)
+const publicProduct=process.argv.includes('--public-product');
+const elig = k.filter((o) => (o.model || (publicProduct && o.title)) && !collab.test(o.title) && (o.n >= 10 || publicProduct));   // 2026-11-07: 시세 15만원 하한 삭제(마진 양수면 모두 포함)
 const have = new Set(j.jobs.map((x) => x.id)); let add = 0;
 for (const o of elig) {
-  const q = useQ2 ? o.q2 : o.q1; if (!q) continue; const id = `N${o.id}-${useQ2 ? 's2' : 's'}`; if (have.has(id)) continue;
+  const q = useQ2 ? o.q2 : ((publicProduct && o.model?.includes(' / ')) ? o.model.split(' / ')[0].replace(/-/g,' ') : (o.q1 || (publicProduct ? o.title : null))); if (!q) continue; const id = `N${o.id}-${useQ2 ? 's2' : 's'}`; if (have.has(id)) continue;
   j.jobs.push({ id, url: 'https://search.shopping.naver.com/search/all?sort=price_asc&query=' + encodeURIComponent(q), actions: acts }); add++;
 }
 fs.writeFileSync(path.join(dir, 'jobs.json'), JSON.stringify(j, null, 1)); fs.writeFileSync(path.join(dir, 'n-eligible.json'), JSON.stringify(elig.map((o) => o.id)));

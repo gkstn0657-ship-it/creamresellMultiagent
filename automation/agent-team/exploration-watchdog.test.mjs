@@ -43,3 +43,20 @@ test('automatic resume honors a stop arriving after its initial check',async()=>
  await assert.rejects(startExploration(f.options.root,{workId,resume:true},{requireOpenWork:true,launchExploration:()=>assert.fail('must not launch')}),/STOP_REQUESTED/);
  assert.equal(JSON.parse(fs.readFileSync(f.workFile,'utf8')).status,'stopped');
 });
+
+test('each saved scope waits for authentication and resumes only its matching runner',async()=>{
+ for(const inspection of [false,true]){
+  const f=fixture();
+  if(inspection)f.save(f.workFile,{id:workId,status:'open',scopeMode:'inspected-sources',targetProducts:300,entries:[]});
+  f.save(f.stateFile,{status:'needs_attention',error:'NO1_AUTH_REQUIRED'});
+  let ready=false,inspections=0;
+  f.options.client.request=async cmd=>cmd==='connector:session-status'?{authenticatedTabCount:Number(ready),distinctSessionCount:Number(ready)}:{};
+  f.options.resumeInspection=async(root,args)=>{assert.equal(root,f.options.root);assert.deepEqual(args,{workId});inspections++;return {launched:true};};
+  assert.equal((await pollExplorationWatchdog(f.options)).status,'waiting');
+  ready=true;
+  assert.equal((await pollExplorationWatchdog(f.options)).status,'restarted');
+  assert.equal(inspections,Number(inspection));
+  assert.equal(f.counts().launches,Number(!inspection));
+  assert.equal((await pollExplorationWatchdog(f.options)).status,'cooldown');
+ }
+});
