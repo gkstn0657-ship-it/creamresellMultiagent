@@ -58,7 +58,8 @@ export async function rankingWorker({root,dir,execute=runBatch,collect=collectRa
       packet=result.packet||null;
       if(result.status==='collected')validateSourcePacket(packet,source);
       if(packet)write(file,packet);
-      const row={sourceId:source.productId,status:result.status,reason:result.reason||null,lookupFailed:result.lookupFailed===true,packetProductId:packet?.productId,packetId:packet?.id,marketKeys:packet?[...new Set(packet.offers.map(offerMarketKey))]:[]};
+      const marketChecks=result.marketChecks&&typeof result.marketChecks==='object'?Object.fromEntries(Object.entries(result.marketChecks).filter(([market])=>['kream','poizon'].includes(market)).map(([market,check])=>[market,{status:check.status,reason:check.reason||null,lookupFailed:check.lookupFailed===true}])):null;
+      const row={sourceId:source.productId,status:result.status,reason:result.reason||null,lookupFailed:result.lookupFailed===true,marketChecks,packetProductId:packet?.productId,packetId:packet?.id,marketKeys:packet?[...new Set(packet.offers.map(offerMarketKey))]:[]};
       state.results=state.results.filter(r=>r.sourceId!==source.productId);state.results.push(row);write(sourceFile,state);
       memory.seenSourceIds=[...new Set([...memory.seenSourceIds,source.productId])];
       memory.seenKreamIds=[...new Set([...memory.seenKreamIds,...row.marketKeys])];write(memoryFile,memory);

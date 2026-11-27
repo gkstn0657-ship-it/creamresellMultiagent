@@ -70,8 +70,8 @@ test('Musinsa source selection preserves settings and cross-request deduplicatio
 });
 test('Musinsa skipped source is recorded once and is never a profitable judgment',async t=>{
  const root=fixture(t),dir=path.join(root,'batch');fs.mkdirSync(dir);fs.writeFileSync(path.join(dir,'sources.json'),JSON.stringify([{productId:'1',productUrl:'https://www.musinsa.com/products/1'}]));let calls=0;
- const options={root,dir,collect:async()=>{calls++;return {status:'skipped',reason:'NO_AVAILABLE_STOCK'};},client:{},execute:async()=>{throw Error('SHOULD_NOT_JUDGE');}};
- const result=await rankingWorker(options);assert.equal(result.status,'complete');assert.equal(result.results.length,0);assert.equal(result.sourceResults[0].reason,'NO_AVAILABLE_STOCK');await rankingWorker(options);assert.equal(calls,1);
+ const options={root,dir,collect:async()=>{calls++;return {status:'skipped',reason:'NO_MARKET_QUALIFYING_OPTION',marketChecks:{kream:{status:'skipped',reason:'EXACT_MARKET_MODEL_NOT_FOUND'},poizon:{status:'skipped',reason:'POIZON_EXACT_MODEL_NOT_FOUND'}}};},client:{},execute:async()=>{throw Error('SHOULD_NOT_JUDGE');}};
+ const result=await rankingWorker(options);assert.equal(result.status,'complete');assert.equal(result.results.length,0);assert.equal(result.sourceResults[0].marketChecks.kream.reason,'EXACT_MARKET_MODEL_NOT_FOUND');await rankingWorker(options);assert.equal(calls,1);
 });
 test('Musinsa authentication failures do not consume a source or become skips',async t=>{
  const root=fixture(t),dir=path.join(root,'batch');fs.mkdirSync(dir);fs.writeFileSync(path.join(dir,'sources.json'),JSON.stringify([{productId:'1'}]));
@@ -104,6 +104,13 @@ test('actual worker errors remain visible even when Herdr reporting fails',async
  const root=fixture(t),runId='batch-22222222-2222-2222-2222-222222222222',dir=path.join(root,runId);fs.mkdirSync(dir);fs.writeFileSync(path.join(dir,'products.json'),'[]');
  await assert.rejects(worker({root,runId,paneId:'test',herdr:{report:async()=>{throw Error('DISPLAY_OFFLINE');}},execute:async()=>{throw Error('REAL_COLLECTION_FAILURE');}}),/REAL_COLLECTION_FAILURE/);
  const saved=JSON.parse(fs.readFileSync(path.join(dir,'batch-state.json')));assert.equal(saved.status,'needs_attention');assert.equal(saved.error,'REAL_COLLECTION_FAILURE');
+});
+test('diagnostic agent runs after a ranking batch without replacing its reviewed result',async t=>{
+ const root=fixture(t),runId='batch-33333333-3333-3333-3333-333333333333',dir=path.join(root,runId);fs.mkdirSync(dir);fs.writeFileSync(path.join(dir,'launch.json'),JSON.stringify({analysisProfile:'musinsa-ranking'}));
+ fs.writeFileSync(path.join(dir,'sources.json'),JSON.stringify([{productId:'1',productName:'sample'}]));fs.writeFileSync(path.join(dir,'source-state.json'),JSON.stringify({results:[{sourceId:'1',status:'skipped',reason:'NO_MARKET_QUALIFYING_OPTION'}]}));
+ const result={status:'complete',results:[],sourceResults:[{sourceId:'1',status:'skipped'}]};let diagnosed=0;
+ const actual=await worker({root,runId,paneId:'p',herdr:{report:async()=>{}},collectRanking:async()=>result,diagnose:async({cases})=>{diagnosed++;assert.equal(cases.length,1);throw Error('DIAGNOSTIC_SERVICE_TEMPORARY_FAILURE');}});
+ assert.equal(actual,result);assert.equal(diagnosed,1);assert.equal(fs.existsSync(path.join(dir,'STOP')),false);
 });
 test('coordinator timeout settles old turn then resumes same thread without stopping or relaunching workers',async t=>{
  const journal=new Journal(fixture(t),{...mission,maxTurns:3});let calls=0,settled=false,stops=0,factoryOptions;const threads=[];
