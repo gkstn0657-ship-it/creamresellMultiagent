@@ -43,7 +43,7 @@ export class Backend {
     const batches=this.journal.data.batches.map(b=>{
       const dir=path.join(this.root,b.runId),state=read(path.join(dir,'batch-state.json')),proc=read(path.join(dir,'process.json'));
       const sourceState=read(path.join(dir,'source-state.json'));
-      return {...b,status:state?.status||'launch_pending',workerAlive:alive(proc?.pid),error:state?.error||null,sourceResults:sourceState?.results||[],
+      return {...b,status:state?.status||'launch_pending',workerAlive:!['complete','needs_attention','stopped'].includes(state?.status)&&alive(proc?.pid),error:state?.error||null,sourceResults:sourceState?.results||[],
         results:(state?.results||[]).map(r=>({productId:r.productId,status:r.status,decision:r.assessment?.decision,reviewId:r.assessment?.reviewId,verified:verifiedResult(dir,r),error:r.error}))};
     });
     const result={workId:this.journal.data.workId,status:this.journal.data.status,continuous:this.journal.data.mission.continuous===true,target:this.journal.data.mission.continuous?null:this.journal.data.mission.targetProducts,

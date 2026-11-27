@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {rankingSizeMatch,collectKreamCandidate} from '../agent-team/musinsa-ranking-collector.mjs';
 import {makePacket} from '../agent-team/packets.mjs';
-import {resolveCases,retryExcludedSource} from './exclusion-resolution-agent.mjs';
+import {resolveCases,resolveRun,retryExcludedSource,watchResolution} from './exclusion-resolution-agent.mjs';
 
 const write=(file,value)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify(value));};
 function fixture(t){const root=fs.mkdtempSync(path.join(os.tmpdir(),'cream-resolution-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const batchDir=path.join(root,'batch-11111111-1111-1111-1111-111111111111'),source={productId:'1',productName:'sample',productUrl:'https://www.musinsa.com/products/1'};write(path.join(batchDir,'sources.json'),[source]);write(path.join(batchDir,'source-evidence','1','1.json'),{cmd:'stock:check',observedAt:new Date().toISOString()});return {root,batchDir,item:{batchId:path.basename(batchDir),batchDir,sourceRow:{sourceId:'1',status:'skipped',reason:'NO_MARKET_QUALIFYING_OPTION'},facts:{sourceId:'1',sourceName:'sample',basisHash:'basis-1',kream:{code:'AVAILABLE_OPTION_NOT_BOUND'},poizon:{code:'POIZON_EXACT_MODEL_NOT_FOUND'},confidence:'recorded'},diagnosis:{status:'complete',summary:'Options unbound'}}};}
@@ -45,6 +45,13 @@ test('temporary No1 busy response is retried on the same request',async t=>{
  const f=fixture(t);let requests=0;
  const result=await retryExcludedSource(f.item,{root:f.root,outDir:path.join(f.root,'resolution'),retryDelays:[0],client:{status:async()=>({}),request:async()=>{requests++;if(requests===1)throw Error('NO1_BRIDGE_BUSY');return {ok:true};}},collect:async(_source,{client})=>{await client.request('stock:check',{url:'same'});return {status:'skipped',reason:'EXACT_MARKET_MODEL_NOT_FOUND'};}});
  assert.equal(requests,2);assert.equal(result.status,'still_excluded');
+});
+test('resolution agent yields No1 when the primary sourcing batch needs bridge recovery',async t=>{
+ const f=fixture(t),runDir=path.join(f.root,'run');write(path.join(f.batchDir,'source-state.json'),{results:[f.item.sourceRow]});write(path.join(f.batchDir,'batch-state.json'),{status:'needs_attention',error:'NO1_BRIDGE_BUSY'});write(path.join(runDir,'state.json'),{mission:{source:'musinsa-ranking'},root:f.root,batches:[{runId:f.item.batchId}]});
+ const result=await resolveRun(runDir,{serverFactory:()=>{throw Error('MODEL_MUST_NOT_START');}});assert.equal(result.holdReason,'SOURCE_BRIDGE_RECOVERY');assert.equal(result.counts.pending,1);write(path.join(f.batchDir,'batch-state.json'),{status:'collecting'});assert.equal((await resolveRun(runDir,{serverFactory:()=>{throw Error('MODEL_MUST_NOT_START');}})).holdReason,'SOURCE_BATCH_ACTIVE');
+});
+test('watcher recovers an interrupted recheck without claiming collection success',async t=>{
+ const f=fixture(t),runDir=path.join(f.root,'run'),file=path.join(runDir,'exclusion-resolution','cases','1.json');write(file,{sourceId:'1',status:'rechecking',basisHash:'basis-1'});fs.writeFileSync(path.join(runDir,'STOP'),'stop');await watchResolution(runDir,{intervalMs:1});const saved=JSON.parse(fs.readFileSync(file));assert.equal(saved.status,'needs_attention');assert.equal(saved.retry.reason,'RESOLUTION_WORKER_INTERRUPTED');assert.equal(fs.existsSync(path.join(runDir,'exclusion-resolution.lock')),false);
 });
 test('a new packet alone cannot claim recovery without a real independent review',async t=>{
  const f=fixture(t),outDir=path.join(f.root,'resolution'),offer={kreamId:'123',productUrl:'https://www.musinsa.com/products/1',model:'M1',color:'Black',option:'L'};
