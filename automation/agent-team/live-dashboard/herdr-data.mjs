@@ -10,6 +10,7 @@ import {agentActivity} from './agent-activity.mjs';
 import {continuousRuns,continuousData} from './continuous-data.mjs';
 import {withWorkLock,stopWork} from '../work-orders.mjs';
 import {resultDetails} from './result-data.mjs';
+import {explorationStatus} from './exploration-status.mjs';
 const exec=promisify(execFile);
 export const defaultRuns=fileURLToPath(new URL('../../../kream-runs/',import.meta.url));
 const read=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return null;}};
@@ -41,13 +42,15 @@ export function herdrData(root=defaultRuns,id){
    const activities=(team.actors||[]).map(a=>({...agentActivity({id:a.threadId,role:a.role,model:{model:a.effectiveModel||a.requestedModel||a.model||null,effort:a.effort},events:(team.events||[]).filter(e=>e.threadId===a.threadId),live:teamLive,terminal:team.status==='complete'||(team.reviews||[]).some(r=>r.threadId===a.threadId),retired:a.role==='owner_retired'}),productId,runId:b.runId}));
    return {productId,details:resultDetails(team,row),activities,status:team.status||row.status||'pending',decision:row.assessment?.decision||team.assessment?.decision,reason:row.assessment?.reason||team.assessment?.reason,verified,error:row.error,model:team.ownerModel||null,actors:(team.actors||[]).map(a=>({role:a.role,model:a.effectiveModel||a.requestedModel||a.model||null,effort:a.effort,reason:a.routingReason})),upgrades:team.modelUpgradeCount||0};
   });
-  return {runId:b.runId,paneId:b.paneId,reason:b.reason,status:batch.status||'launch_pending',alive:alive(read(path.join(base,'process.json'))?.pid),error:batch.error,products,sources};
+  const savedSources=read(path.join(base,'sources.json'));
+  const sourceItems=(Array.isArray(savedSources)?savedSources:[]).map(s=>({productId:String(s.productId),rank:s.rank,productName:s.productName,productUrl:s.productUrl}));
+  return {runId:b.runId,paneId:b.paneId,reason:b.reason,status:batch.status||'launch_pending',alive:alive(read(path.join(base,'process.json'))?.pid),error:batch.error,products,sources,sourceItems};
  }):[];
  const reviewed=batches.flatMap(b=>b.products).filter(p=>p.verified).length;
  const skipped=batches.reduce((n,b)=>n+b.sources.filter(s=>s.status==='skipped').length,0);
  const completed=state.mission.source==='musinsa-ranking'?batches.filter(b=>b.status==='complete').reduce((n,b)=>n+b.sources.filter(s=>s.status==='skipped'||b.products.some(p=>p.productId===s.packetProductId&&p.verified)).length,0):reviewed;
  const agents=[agentActivity({id:state.threadId||'coordinator',role:'coordinator',model:state.modelSelection,events:state.history||[],live:controllerAlive,terminal:['complete','blocked','source_exhausted','stopped'].includes(state.status)}),...batches.flatMap(b=>[{id:b.runId,role:'worker',status:b.status==='complete'?'finished':b.alive?'working':'offline',live:b.alive,phase:b.status,model:null,paneId:b.paneId,events:[],message:b.error||null},...b.products.flatMap(p=>p.activities)])];
- return {runs,selected:id,agents,observedAt:new Date().toISOString(),policy:modelPolicy.defaults,mission:state.mission,status:state.status,controllerAlive,stopping,trusted,turns:state.turns,model:state.modelSelection||null,error:state.error||(!trusted?'DATA_ROOT_NOT_SUPPORTED':null),completed,reviewed,skipped,batches,events:(state.history||[]).slice(-30).reverse(),canStop:trusted&&(controllerAlive||batches.some(b=>b.alive)),canResume:trusted&&!controllerAlive&&!batches.some(b=>b.alive)&&!['complete','source_exhausted'].includes(state.status)};
+ return {runs,selected:id,agents,observedAt:new Date().toISOString(),policy:modelPolicy.defaults,mission:state.mission,status:state.status,controllerAlive,stopping,trusted,turns:state.turns,model:state.modelSelection||null,error:state.error||(!trusted?'DATA_ROOT_NOT_SUPPORTED':null),completed,reviewed,skipped,exploration:explorationStatus(batches),batches,events:(state.history||[]).slice(-30).reverse(),canStop:trusted&&(controllerAlive||batches.some(b=>b.alive)),canResume:trusted&&!controllerAlive&&!batches.some(b=>b.alive)&&!['complete','source_exhausted'].includes(state.status)};
 }
 export async function herdrAction(root,id,action,maxTurns){
  const data=herdrData(root,id);

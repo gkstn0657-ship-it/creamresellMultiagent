@@ -1,5 +1,6 @@
 import {renderAgents} from '/agent-activity-ui.js';
 import {renderResults} from '/results-ui.js';
+import {renderExploration} from '/exploration-ui.js';
 const $=id=>document.getElementById(id),put=(id,v)=>{$(id).textContent=v??'—';};
 const labels={ready:'실행 준비',waiting_connection:'No1 연결 대기',running:'진행 중',complete:'완료',blocked:'진행 차단',needs_attention:'확인 필요',stopped:'중지됨',source_exhausted:'후보 소진',judging:'상품 판단',collecting:'수집 중',launch_pending:'실행 요청',hold:'보류',exclude:'제외',adopt:'조사 후보 채택',owner:'상품 담당',owner_retired:'이전 담당',reviewer:'독립 검수'};
 const label=v=>labels[v]||v||'기록 없음',model=m=>m?`${m.model||'모델 미기록'} / ${m.effort||'강도 미기록'}`:'기존 기록에 모델 없음';
@@ -14,6 +15,7 @@ function render(d){
  $('policy').replaceChildren(...[['coordinator','지휘자'],['owner','상품 판단'],['reviewer','일반 검수'],['deepReviewer','심층 검수']].map(([role,name])=>{const n=el('div',null,'policy-item');n.append(el('small',name),el('strong',model(d.policy[role])),el('small',role==='owner'?'근거 제시 후 Sol/high 1회 승격':'저장된 정책'));return n;}));
  if(!d.selected){renderAgents([]);put('headline','등록된 Herdr 작업이 없습니다');put('mission','새 작업이 저장되면 자동으로 나타납니다.');buttons();return;}
  renderAgents(d.agents||[],selected);
+ renderExploration(d);
  renderResults(d);
  $('budget').disabled=!!d.continuous||!!d.mission.continuous;
  put('state',label(d.status));put('headline',d.stopping&&d.controllerAlive?'중지 요청 처리 중':label(d.status));put('mission',d.mission.instruction);put('model',model(d.model));put('turns',`턴 ${d.turns} / ${d.mission.maxTurns}`);put('process',d.controllerAlive?'지휘자 프로세스 실행 중':'지휘자 프로세스 종료');put('scope',`${d.mission.source} · 기존 작업 범위 유지`);put('updated',new Date(d.observedAt).toLocaleTimeString('ko-KR'));put('error',d.error||(!d.controllerAlive&&d.status==='running'?'실행 기록은 진행 중이지만 지휘자 프로세스가 없습니다.':''));
