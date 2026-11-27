@@ -50,7 +50,13 @@ export function herdrData(root=defaultRuns,id){
  const skipped=batches.reduce((n,b)=>n+b.sources.filter(s=>s.status==='skipped').length,0);
  const completed=state.mission.source==='musinsa-ranking'?batches.filter(b=>b.status==='complete').reduce((n,b)=>n+b.sources.filter(s=>s.status==='skipped'||b.products.some(p=>p.productId===s.packetProductId&&p.verified)).length,0):reviewed;
  const agents=[agentActivity({id:state.threadId||'coordinator',role:'coordinator',model:state.modelSelection,events:state.history||[],live:controllerAlive,terminal:['complete','blocked','source_exhausted','stopped'].includes(state.status)}),...batches.flatMap(b=>[{id:b.runId,role:'worker',status:b.status==='complete'?'finished':b.alive?'working':'offline',live:b.alive,phase:b.status,model:null,paneId:b.paneId,events:[],message:b.error||null},...b.products.flatMap(p=>p.activities)])];
- return {runs,selected:id,agents,observedAt:new Date().toISOString(),policy:modelPolicy.defaults,mission:state.mission,status:state.status,controllerAlive,stopping,trusted,turns:state.turns,model:state.modelSelection||null,error:state.error||(!trusted?'DATA_ROOT_NOT_SUPPORTED':null),completed,reviewed,skipped,exploration:explorationStatus(batches),batches,events:(state.history||[]).slice(-30).reverse(),canStop:trusted&&(controllerAlive||batches.some(b=>b.alive)),canResume:trusted&&!controllerAlive&&!batches.some(b=>b.alive)&&!['complete','source_exhausted'].includes(state.status)};
+ const exploration=explorationStatus(batches);
+ for(const row of exploration.rows.filter(r=>r.status==='skipped')){
+  const saved=read(path.join(dir,'exclusion-diagnostics','cases',row.sourceId+'.json'))||read(path.join(trustedRoot,row.batchId,'exclusion-diagnostics','cases',row.sourceId+'.json'));
+  if(saved?.batchId===row.batchId&&saved.facts?.sourceId===row.sourceId&&saved.facts?.summaryCode===row.reason)row.diagnosis={kream:saved.facts.kream,poizon:saved.facts.poizon,confidence:saved.facts.confidence,agent:saved.agent};
+ }
+ exploration.counts.diagnosed=exploration.rows.filter(r=>r.diagnosis?.agent?.status==='complete').length;
+ return {runs,selected:id,agents,observedAt:new Date().toISOString(),policy:modelPolicy.defaults,mission:state.mission,status:state.status,controllerAlive,stopping,trusted,turns:state.turns,model:state.modelSelection||null,error:state.error||(!trusted?'DATA_ROOT_NOT_SUPPORTED':null),completed,reviewed,skipped,exploration,batches,events:(state.history||[]).slice(-30).reverse(),canStop:trusted&&(controllerAlive||batches.some(b=>b.alive)),canResume:trusted&&!controllerAlive&&!batches.some(b=>b.alive)&&!['complete','source_exhausted'].includes(state.status)};
 }
 export function adoptedCandidate(root=defaultRuns,id,productId){
  if(typeof productId!=='string'||!/^(?:\d{1,12}|poizon-\d{1,18})$/.test(productId))throw Error('ADOPTED_CANDIDATE_NOT_FOUND');

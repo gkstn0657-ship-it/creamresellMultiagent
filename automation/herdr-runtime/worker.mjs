@@ -6,7 +6,8 @@ import {Herdr,reportStatus} from './herdr.mjs';
 import {writeJsonAtomic} from '../agent-team/atomic-json.mjs';
 import {read,lock} from './state.mjs';
 import {rankingWorker} from './ranking-worker.mjs';
-export async function worker({root,runId,herdr,paneId,execute=runBatch}) {
+import {diagnoseCases,savedExclusionCases} from './exclusion-agent.mjs';
+export async function worker({root,runId,herdr,paneId,execute=runBatch,collectRanking=rankingWorker,diagnose=diagnoseCases}) {
   if(!/^batch-[a-f0-9-]{36}$/.test(runId))throw Error('INVALID_RUN_ID');
   const dir=path.join(root,runId),release=lock(dir);
   try {
@@ -14,7 +15,12 @@ export async function worker({root,runId,herdr,paneId,execute=runBatch}) {
     if(fs.existsSync(path.join(dir,'STOP')))throw Error('STOP_REQUESTED');
     fs.writeFileSync(path.join(dir,'process.json'),JSON.stringify({pid:process.pid,launchedAt:new Date().toISOString()}));
     await reportStatus(dir,()=>herdr.report(paneId,'working','Collecting and independently reviewing products'));
-    const result=read(path.join(dir,'launch.json'))?.analysisProfile==='musinsa-ranking'?await rankingWorker({root,dir,execute}):await execute({seeds:read(path.join(dir,'products.json')),dir,concurrency:2,resume:Boolean(prior),analysisProfile:'general',onEvent:e=>console.log(JSON.stringify(e))});
+    const ranking=read(path.join(dir,'launch.json'))?.analysisProfile==='musinsa-ranking';
+    const result=ranking?await collectRanking({root,dir,execute}):await execute({seeds:read(path.join(dir,'products.json')),dir,concurrency:2,resume:Boolean(prior),analysisProfile:'general',onEvent:e=>console.log(JSON.stringify(e))});
+    if(ranking&&result.status==='complete'&&!fs.existsSync(path.join(dir,'STOP'))){
+      try{await diagnose({cases:savedExclusionCases([dir]),outDir:path.join(dir,'exclusion-diagnostics'),stopCheck:()=>fs.existsSync(path.join(dir,'STOP'))});}
+      catch(error){console.error(JSON.stringify({type:'exclusion_diagnostic_incomplete',runId,error:error.message}));}
+    }
     await reportStatus(dir,()=>herdr.report(paneId,result.status==='complete'?'idle':'blocked',result.status));return result;
   } catch(e){const old=read(path.join(dir,'batch-state.json'))||{};writeJsonAtomic(path.join(dir,'batch-state.json'),{...old,status:fs.existsSync(path.join(dir,'STOP'))?'stopped':'needs_attention',error:e.message});await reportStatus(dir,()=>herdr.report(paneId,'blocked',e.message));throw e;}
   finally {release();}
