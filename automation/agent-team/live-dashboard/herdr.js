@@ -9,7 +9,7 @@ const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.te
 let data=null,busy=false,loading=false,selected=new URL(location.href).searchParams.get('run')||'',fresh=false;
 function buttons(){$('runs').disabled=busy;for(const action of ['stop','resume'])$(action).disabled=busy||!fresh||!(action==='stop'?data?.canStop:data?.canResume);}
 function render(d){
- data=d;const options=d.runs.map(r=>[r.id,`${r.id} · ${label(r.status)}`]);
+ data=d;const options=d.runs.map(r=>[r.id,`${r.id} · ${label(r.id===d.selected?(d.displayStatus||r.status):r.status)}`]);
  if(JSON.stringify(options)!==$('runs').dataset.options){$('runs').replaceChildren(...options.map(([v,t])=>{const o=el('option',t);o.value=v;return o;}));$('runs').dataset.options=JSON.stringify(options);}
  selected=d.selected||'';$('runs').value=selected;
  $('policy').replaceChildren(...[['coordinator','지휘자'],['owner','상품 판단'],['reviewer','일반 검수'],['deepReviewer','심층 검수']].map(([role,name])=>{const n=el('div',null,'policy-item');n.append(el('small',name),el('strong',model(d.policy[role])),el('small',role==='owner'?'근거 제시 후 Sol/high 1회 승격':'저장된 정책'));return n;}));
@@ -18,7 +18,7 @@ function render(d){
  renderExploration(d);
  renderResults(d);
  $('budget').disabled=!!d.continuous||!!d.mission.continuous;
- put('state',label(d.status));put('headline',d.stopping&&d.controllerAlive?'중지 요청 처리 중':label(d.status));put('mission',d.mission.instruction);put('model',model(d.model));put('turns',`턴 ${d.turns} / ${d.mission.maxTurns}`);put('process',d.controllerAlive?'지휘자 프로세스 실행 중':'지휘자 프로세스 종료');put('scope',`${d.mission.source} · 기존 작업 범위 유지`);put('updated',new Date(d.observedAt).toLocaleTimeString('ko-KR'));put('error',d.error||(!d.controllerAlive&&d.status==='running'?'실행 기록은 진행 중이지만 지휘자 프로세스가 없습니다.':''));
+ put('state',label(d.displayStatus||d.status));put('headline',d.stopping&&d.controllerAlive?'중지 요청 처리 중':label(d.displayStatus||d.status));put('mission',d.mission.instruction);put('model',model(d.model));put('turns',`턴 ${d.turns} / ${d.mission.maxTurns}`);put('process',d.controllerAlive?'지휘자 프로세스 실행 중':'지휘자 프로세스 종료');put('scope',`${d.mission.source} · 기존 작업 범위 유지`);put('updated',new Date(d.observedAt).toLocaleTimeString('ko-KR'));put('error',d.displayReason||d.error||(!d.controllerAlive&&d.status==='running'?'실행 기록은 진행 중이지만 지휘자 프로세스가 없습니다.':''));
  put('completed',`${d.completed} / ${d.mission.targetProducts}`);put('unit',d.mission.source==='musinsa-ranking'?'확인한 구매처 상품 수':'검수 완료 상품 수');put('reviewed',d.reviewed);put('skipped',d.skipped);put('workers',d.batches.filter(b=>b.alive).length);$('progress').max=d.mission.targetProducts;$('progress').value=d.completed;
  if(d.continuous){put('completed',`${d.completed} / ∞`);put('unit','확인한 구매처 상품 수');put('model','규칙 기반 연속 실행기');put('turns','중지 요청까지 계속');put('process',d.controllerAlive?'연속 실행기 동작 중':'연속 실행기 종료');put('workers',(d.agents||[]).filter(a=>a.role==='worker'&&a.status==='working').length);$('progress').max=1;$('progress').value=0;}
  if(d.mission.continuous){put('completed',`${d.completed} / ∞`);put('turns',`지휘자 턴 ${d.turns} · 중지 요청까지 계속`);$('progress').max=1;$('progress').value=0;}

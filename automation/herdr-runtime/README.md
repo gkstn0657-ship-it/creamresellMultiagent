@@ -18,6 +18,8 @@ node automation/herdr-runtime/exclusion-agent.mjs --dir=kream-runs/herdr-continu
 
 결과는 실행 폴더의 `exclusion-resolution/cases/<무신사 상품 ID>.json`과 `summary.json`에 저장되며 대시보드의 제외 원인 상세에서 확인한다. 재조회 후에도 일치 상품·옵션·양의 마진이 없으면 `still_excluded`로 남고 근거가 바뀌기 전까지 정해진 간격으로 대기한다. 수동으로 한 차례 확인하려면 `node automation/herdr-runtime/exclusion-resolution-agent.mjs --dir=<Herdr 실행 폴더>`를 사용한다. `--watch`는 같은 작업의 STOP까지 감시한다. 구매나 소스 코드 수정은 하지 않는다.
 
+본 소싱의 배치가 수집·판단 중이거나 `NO1_BRIDGE_BUSY` 복구를 기다리는 동안 해결 담당의 새 No1 재조회는 보류한다. 완료·오류 배치의 오래된 PID가 다른 프로세스에 재사용돼도 워커 실행 중으로 계산하지 않는다. 해결 담당 프로세스가 중단된 채 남긴 `rechecking` 기록은 다음 시작 시 보류 상태로 복구한다.
+
 Herdr 0.9.5 Windows에서 실행하는 별도 소싱 런타임이다. AI 지휘자가 관측된 후보 선택, 다음 목록 조회, 분석 실행, 대기, 실패 배치 재시도와 종료를 결정한다. 상품 판단은 기존 담당 AI와 독립 검토 AI가 수행한다. 계산·저장·중복 방지·수량 상한·STOP·검토 유효성은 코드가 강제한다. 구매, 계정 조작, 운영 중 코드 수정은 제공하지 않는다.
 
 기존 실행기의 고정 탐색 정책은 그대로 남는다. 이 경로는 2026-11-26 사용자가 요청한 AI 자율 조율 모드다. Dot 원격 MCP의 기존 시작 도구는 이 런타임으로 자동 전환되지 않는다.

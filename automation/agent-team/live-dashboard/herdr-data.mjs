@@ -55,11 +55,13 @@ export function herdrData(root=defaultRuns,id){
   });
   const savedSources=read(path.join(base,'sources.json'));
   const sourceItems=(Array.isArray(savedSources)?savedSources:[]).map(s=>({productId:String(s.productId),rank:s.rank,productName:s.productName,productUrl:s.productUrl}));
-  return {runId:b.runId,paneId:b.paneId,reason:b.reason,status:batch.status||'launch_pending',alive:alive(read(path.join(base,'process.json'))?.pid),error:batch.error,products,sources,sourceItems};
+  return {runId:b.runId,paneId:b.paneId,reason:b.reason,status:batch.status||'launch_pending',alive:!['complete','needs_attention','stopped'].includes(batch.status)&&alive(read(path.join(base,'process.json'))?.pid),error:batch.error,products,sources,sourceItems};
  }):[];
  const reviewed=batches.flatMap(b=>b.products).filter(p=>p.verified).length;
  const skipped=batches.reduce((n,b)=>n+b.sources.filter(s=>s.status==='skipped').length,0);
  const completed=state.mission.source==='musinsa-ranking'?batches.filter(b=>b.status==='complete').reduce((n,b)=>n+b.sources.filter(s=>s.status==='skipped'||b.products.some(p=>p.productId===s.packetProductId&&p.verified)).length,0):reviewed;
+ const latest=batches.at(-1),displayStatus=state.status==='running'&&latest?.status==='needs_attention'&&!latest.alive?(latest.error==='NO1_BRIDGE_BUSY'?'waiting_for_retry':'needs_attention'):state.status;
+ const displayReason=displayStatus!==state.status?`마지막 배치 ${latest.runId} · ${latest.error||'오류 미확인'} · 재시도 대기`:null;
  const agents=[agentActivity({id:state.threadId||'coordinator',role:'coordinator',model:state.modelSelection,events:state.history||[],live:controllerAlive,terminal:['complete','blocked','source_exhausted','stopped'].includes(state.status)}),...batches.flatMap(b=>[{id:b.runId,role:'worker',status:b.status==='complete'?'finished':b.alive?'working':'offline',live:b.alive,phase:b.status,model:null,paneId:b.paneId,events:[],message:b.error||null},...b.products.flatMap(p=>p.activities)])];
  const exploration=explorationStatus(batches);
  for(const row of exploration.rows.filter(r=>r.status==='skipped')){
@@ -70,7 +72,7 @@ export function herdrData(root=defaultRuns,id){
  }
  exploration.counts.diagnosed=exploration.rows.filter(r=>r.diagnosis?.agent?.status==='complete').length;
  exploration.counts.recovered=exploration.rows.filter(r=>r.resolution?.status==='recovered').length;
- return {runs,selected:id,agents,observedAt:new Date().toISOString(),policy:modelPolicy.defaults,mission:state.mission,status:state.status,controllerAlive,stopping,trusted,turns:state.turns,model:state.modelSelection||null,error:state.error||(!trusted?'DATA_ROOT_NOT_SUPPORTED':null),completed,reviewed,skipped,exploration,batches,events:(state.history||[]).slice(-30).reverse(),canStop:trusted&&(controllerAlive||batches.some(b=>b.alive)),canResume:trusted&&!controllerAlive&&!batches.some(b=>b.alive)&&!['complete','source_exhausted'].includes(state.status)};
+ return {runs,selected:id,agents,observedAt:new Date().toISOString(),policy:modelPolicy.defaults,mission:state.mission,status:state.status,displayStatus,displayReason,controllerAlive,stopping,trusted,turns:state.turns,model:state.modelSelection||null,error:state.error||(!trusted?'DATA_ROOT_NOT_SUPPORTED':null),completed,reviewed,skipped,exploration,batches,events:(state.history||[]).slice(-30).reverse(),canStop:trusted&&(controllerAlive||batches.some(b=>b.alive)),canResume:trusted&&!controllerAlive&&!batches.some(b=>b.alive)&&!['complete','source_exhausted'].includes(state.status)};
 }
 export function adoptedCandidate(root=defaultRuns,id,productId){
  if(typeof productId!=='string'||!/^(?:\d{1,12}|poizon-\d{1,18})$/.test(productId))throw Error('ADOPTED_CANDIDATE_NOT_FOUND');

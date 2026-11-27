@@ -34,7 +34,7 @@ function retryPolicy(item,previous,now){
  const codes=[item.facts.kream.code,item.facts.poizon.code],delay=Math.max(...codes.map(c=>interval[c]||0));
  const first=observedAt(item.batchDir,item.facts.sourceId),last=Date.parse(previous?.attemptedAt)||first;
  const transient=previous?.status==='needs_attention'&&isTransientSourceError(previous.retry?.reason);
- const retryAt=transient?last+300000:Math.max(last+Math.max(delay,3600000),Date.parse(previous?.retryAt)||0);
+ const retryAt=previous?.deferredForSource?Date.parse(previous.retryAt):transient?last+300000:Math.max(last+Math.max(delay,3600000),Date.parse(previous?.retryAt)||0);
  const lookupFailed=item.sourceRow?.lookupFailed===true||Object.values(item.sourceRow?.marketChecks||{}).some(c=>c.lookupFailed===true);
  const allowed=Boolean(first)&&(!previous||now>=retryAt)&&(lookupFailed||item.facts.confidence==='partial'||delay>0)&&!previous?.retry?.inProgress;
  return {retryAllowed:allowed,retryAt:new Date(retryAt||now).toISOString(),lookupFailed,previousAttempt:previous?.attemptedAt||null};
@@ -76,7 +76,7 @@ export async function retryExcludedSource(item,{root,outDir,stopCheck=()=>false,
   return {status:reviewed?'recovered':'needs_attention',reason:reviewed?null:'INDEPENDENT_REVIEW_INCOMPLETE',reviewed:Boolean(reviewed),batchDir:dir,productIds:reviewed?assessed.results.map(r=>r.productId):[]};
  }finally{clearInterval(watch);}
 }
-export async function resolveCases({cases,outDir,root,serverFactory=options=>new CodexServer(options),retry=retryExcludedSource,stopCheck=()=>false,now=Date.now(),maxCases=2}={}){
+export async function resolveCases({cases,outDir,root,serverFactory=options=>new CodexServer(options),retry=retryExcludedSource,stopCheck=()=>false,priorityCheck=()=>null,now=Date.now(),maxCases=2}={}){
  fs.mkdirSync(path.join(outDir,'cases'),{recursive:true});
  const ready=cases.filter(item=>item.diagnosis).map(item=>{
   const file=path.join(outDir,'cases',item.facts.sourceId+'.json'),prior=read(file);
@@ -98,6 +98,8 @@ export async function resolveCases({cases,outDir,root,serverFactory=options=>new
    const file=path.join(outDir,'cases',args.sourceId+'.json'),saved={sourceId:args.sourceId,batchId:item.batchId,basisHash:item.facts.basisHash,model:responseModel,threadId,action:args.action,reason:args.reason.trim(),nextCheck:args.nextCheck.trim(),status:args.action==='retry_once'?'rechecking':args.action,recordedAt:new Date().toISOString(),retryAt:args.action==='wait_for_change'?new Date(now+Math.max(...[item.facts.kream.code,item.facts.poizon.code].map(code=>interval[code]||3600000))).toISOString():item.policy.retryAt};
    writeJsonAtomic(file,saved);log(outDir,{type:'action_saved',sourceId:args.sourceId,action:args.action});
    if(args.action==='retry_once'){
+    const priority=priorityCheck();
+    if(priority){saved.status='wait_for_change';saved.deferredForSource=true;saved.retryAt=new Date(Date.now()+60000).toISOString();saved.retry={status:'deferred',reason:priority};writeJsonAtomic(file,saved);log(outDir,{type:'source_priority',sourceId:args.sourceId,reason:priority});return {saved:true,status:saved.status};}
     try{saved.attemptedAt=new Date().toISOString();writeJsonAtomic(file,saved);saved.retry=await retry(item,{root,outDir,stopCheck});saved.status=saved.retry.status;}
     catch(error){saved.status='needs_attention';saved.retry={status:'needs_attention',reason:error.message};}
     writeJsonAtomic(file,saved);log(outDir,{type:'retry_finished',sourceId:args.sourceId,status:saved.status});
@@ -118,17 +120,28 @@ export async function resolveCases({cases,outDir,root,serverFactory=options=>new
  return summary(cases,outDir);
 }
 function groupByBatch(cases){return cases.map(item=>[item]);}
-function summary(cases,outDir){const counts={};for(const c of cases){const status=read(path.join(outDir,'cases',c.facts.sourceId+'.json'))?.status||'pending';counts[status]=(counts[status]||0)+1;}const result={total:cases.length,counts,updatedAt:new Date().toISOString()};writeJsonAtomic(path.join(outDir,'summary.json'),result);return result;}
+function summary(cases,outDir,holdReason=null){const counts={};for(const c of cases){const status=read(path.join(outDir,'cases',c.facts.sourceId+'.json'))?.status||'pending';counts[status]=(counts[status]||0)+1;}const result={total:cases.length,counts,holdReason,updatedAt:new Date().toISOString()};writeJsonAtomic(path.join(outDir,'summary.json'),result);return result;}
+function sourcePriority(state){
+ const latest=state.batches?.at(-1);if(!latest)return null;
+ const batch=read(path.join(state.root,latest.runId,'batch-state.json'))||{};
+ if(['launch_pending','collecting','judging','running'].includes(batch.status||'launch_pending'))return 'SOURCE_BATCH_ACTIVE';
+ if(batch.status==='needs_attention'&&batch.error==='NO1_BRIDGE_BUSY')return 'SOURCE_BRIDGE_RECOVERY';
+ return null;
+}
 export async function resolveRun(runDir,options={}){
  const state=read(path.join(runDir,'state.json'));if(!state||state.mission?.source!=='musinsa-ranking'||!Array.isArray(state.batches))throw Error('MUSINSA_HERDR_RUN_REQUIRED');
  const dirs=state.batches.filter(b=>/^batch-[a-f0-9-]{36}$/.test(b.runId)).map(b=>path.join(state.root,b.runId));
  const cases=resolutionCases(dirs,[path.join(runDir,'exclusion-diagnostics'),...dirs.map(d=>path.join(d,'exclusion-diagnostics'))]);
- return resolveCases({cases,outDir:path.join(runDir,'exclusion-resolution'),root:state.root,stopCheck:()=>fs.existsSync(path.join(runDir,'STOP')),...options});
+ const outDir=path.join(runDir,'exclusion-resolution'),hold=sourcePriority(state);
+ if(hold){fs.mkdirSync(path.join(outDir,'cases'),{recursive:true});return summary(cases,outDir,hold);}
+ return resolveCases({cases,outDir,root:state.root,stopCheck:()=>fs.existsSync(path.join(runDir,'STOP')),priorityCheck:()=>sourcePriority(read(path.join(runDir,'state.json'))||state),...options});
 }
 export async function watchResolution(runDir,{intervalMs=60000,...options}={}){
  const lock=path.join(runDir,'exclusion-resolution.lock'),old=read(lock);
  if(alive(old?.pid))throw Error('RESOLUTION_ALREADY_RUNNING');
  if(fs.existsSync(lock))fs.rmSync(lock,{force:true});
+ const casesDir=path.join(runDir,'exclusion-resolution','cases');
+ if(fs.existsSync(casesDir))for(const name of fs.readdirSync(casesDir).filter(name=>/^\d{1,12}\.json$/.test(name))){const file=path.join(casesDir,name),saved=read(file);if(saved?.status==='rechecking')writeJsonAtomic(file,{...saved,status:'needs_attention',deferredForSource:true,retryAt:new Date(Date.now()+60000).toISOString(),retry:{status:'deferred',reason:'RESOLUTION_WORKER_INTERRUPTED'}});}
  fs.writeFileSync(lock,JSON.stringify({pid:process.pid,at:new Date().toISOString()}),{flag:'wx'});
  try{while(!fs.existsSync(path.join(runDir,'STOP'))){
   try{await resolveRun(runDir,options);}catch(error){const dir=path.join(runDir,'exclusion-resolution');fs.mkdirSync(dir,{recursive:true});log(dir,{type:'watch_error',error:error.message});}
