@@ -17,9 +17,12 @@ export function renderResults(d){
  document.getElementById('result-caption').textContent='선택한 작업 · 시장별 상품 판단 '+rows.length+'건 · 수집 단계 제외 '+(d.skipped||0)+'건은 별도';
  host.replaceChildren(...filtered.map(p=>{
  const detail=el('details',null,'result-item');detail.dataset.id=p.productId;detail.open=open.has(p.productId);const summary=el('summary');
- const title=el('div',null,'result-title');title.append(el('strong',p.details?.name||p.productId),el('small',(String(p.productId).startsWith('poizon-')?'POIZON':'KREAM')+' · '+p.productId));
+ const title=el('div',null,'result-title');const titleText=el('strong',p.details?.name||p.productId);
+ if(classification(p)==='adopt'){const link=el('a');link.href='/herdr/candidate?run='+encodeURIComponent(d.selected)+'&product='+encodeURIComponent(p.productId);link.append(titleText);title.append(link);}else title.append(titleText);
+ title.append(el('small',(String(p.productId).startsWith('poizon-')?'POIZON':'KREAM')+' · '+p.productId));
  const badge=el('span',names[classification(p)],'result-badge '+classification(p));summary.append(title,badge,el('span',p.verified?'검수 확인':'검수 미완료','result-review'));detail.append(summary);
  const content=el('div',null,'result-body');content.append(el('p',p.reason||p.error||'판단 결과를 기다리고 있습니다.','result-reason'));
+ if(classification(p)==='adopt'){const link=el('a','채택 후보 상세 보기 →','result-detail-link');link.href='/herdr/candidate?run='+encodeURIComponent(d.selected)+'&product='+encodeURIComponent(p.productId);content.append(link);}
  if(p.details?.sourceUrl){try{const u=new URL(p.details.sourceUrl);if(u.protocol==='https:'&&['www.musinsa.com','musinsa.com'].includes(u.hostname)){const link=el('a','구매처 상품 보기 ↗');link.href=u.href;link.target='_blank';link.rel='noopener noreferrer';content.append(link);}}catch{}}
  const table=el('table'),thead=el('thead'),tr=el('tr');for(const h of ['시장 / 옵션','재고','30일 판매량¹','판매 방식','예상 마진²','수익률²'])tr.append(el('th',h));thead.append(tr);table.append(thead);const body=el('tbody');
  for(const o of p.details?.options||[])for(const m of o.margins||[]){const r=el('tr');const known=typeof m.amount==='number'&&Number.isFinite(m.amount);for(const v of [(o.platform||'kream').toUpperCase()+' / '+o.size,num(o.stock),num(o.sales)+(o.salesEstimated===true?' (추정)':o.salesEstimated===false?' (기록)':' (구분 미확인)'),modes[m.mode]||m.mode,known?num(m.amount)+'원':'계산 불가',typeof m.rate==='number'&&Number.isFinite(m.rate)?m.rate.toFixed(2)+'%':'—'])r.append(el('td',v));r.children[4].className=known?(m.amount>0?'positive':m.amount<0?'negative':''):'unknown';body.append(r);}
