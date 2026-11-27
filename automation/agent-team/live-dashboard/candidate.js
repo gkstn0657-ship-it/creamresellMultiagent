@@ -8,7 +8,8 @@ const feeName={explicit_overrides_with_no1_defaults:'확인된 설정과 No1 기
 const issueName={upstreamDataAsOf:'원자료 기준시각',actualCheckoutPrice:'실제 결제 금액',shippingAndSellerFees:'배송비와 판매 수수료',couponQuantityEligibilityAtCheckout:'결제 시 쿠폰·수량 적용 가능 여부',UPSTREAM_FRESHNESS_UNKNOWN:'원자료 최신성 미확인',CALCULATION_MISSING:'계산 근거 일부 누락'};
 const salesName={no1_history_per_size:'No1 옵션별 체결 기록'};
 const parameters=new URL(location.href).searchParams,run=parameters.get('run'),productId=parameters.get('product');
-if(run)$('back').href='/herdr?run='+encodeURIComponent(run);
+if(run){const destination='/herdr?run='+encodeURIComponent(run);$('back').href=destination;$('candidate-back').href=destination;}
+$('candidate-back').addEventListener('click',event=>{try{const previous=new URL(document.referrer);if(previous.origin===location.origin&&previous.pathname==='/herdr'){event.preventDefault();history.back();}}catch{}});
 function sourceLink(url){if(!url)return;try{const parsed=new URL(url);if(parsed.protocol==='https:'&&['musinsa.com','www.musinsa.com'].includes(parsed.hostname)){const link=$('source-link');link.href=parsed.href;link.hidden=false;}}catch{}}
 function render(data){
  const p=data.product,options=p.options||[],platforms=[...new Set(options.map(o=>(o.platform||'kream').toUpperCase()))];
