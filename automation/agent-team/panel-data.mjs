@@ -39,7 +39,8 @@ export function panelData({runId,productId}={},options={}) {
     if(status==='running'&&!selected.workerAlive)status=selected.status==='stopped'?'stopped':'interrupted';
     const item={productId:id,model:offers[0].model,color:offers[0].color,options:offers.map(s=>s.option),status,
       collectionStatus:p?.collectionStatus||'pending',mode:[...new Set(observations.map(o=>o.mode))].join(', ')||'unknown',
-      decision:assessment?.decision||null,reason:short(assessment?.reason||''),readiness:assessment?.readiness||null,
+      purchaseJudgment:assessment?.purchaseJudgment||null,
+      decision:assessment?.decision||null,reason:short((assessment?.reason||'')+(assessment?.purchaseJudgment?'\n매입 최종 판단 · '+({recommend_buy:'매입 권고',do_not_buy:'매입 비권고',hold:'판단 보류'}[assessment.purchaseJudgment.decision])+' — '+assessment.purchaseJudgment.reason:'')),readiness:assessment?.readiness||null,
       unresolved:assessment?.unresolved||p?.gaps||[],observedAt:observations.map(o=>o.observedAt).filter(Boolean).sort().at(-1)||null,
       scenario:calc?{...fields(calc,['perUnit','totalEconomicProfit','totalCashProfit','quantity','missing']),inputs:calc.inputs}:null,
       margins:marginReport(observations),

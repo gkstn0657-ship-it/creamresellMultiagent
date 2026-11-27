@@ -4,7 +4,9 @@ const decisions={adopt:'채택 후보',hold:'보류',exclude:'제외'};
 let run='',filter='all',query='',data=null;
 export function renderExploration(d){
  const host=document.getElementById('exploration-rows');if(!host)return;
- data=d;if(run!==d.selected){run=d.selected;filter='all';query='';}
+ const sameRun=run===d.selected;
+ const expanded=new Set(sameRun?[...host.querySelectorAll('.exploration-diagnosis[open]')].map(n=>n.dataset.sourceId):[]);
+ data=d;if(!sameRun){run=d.selected;filter='all';query='';}
  const rows=d.exploration?.rows||[],counts=d.exploration?.counts||{assigned:0,collected:0,skipped:0,reviewed:0,adopt:0,pending:0,attention:0};
  document.getElementById('exploration-caption').textContent=d.exploration?`무신사 매입처별 저장 기록 · 수집 제외 ${counts.skipped}건 중 원인 분석 ${counts.diagnosed||0}건, 재수집·독립 검토로 복구 ${counts.recovered||0}건. 시장별 판단은 아래 상품 결과에서 확인하세요.`:'이 실행기의 매입처별 탐색 기록은 제공되지 않습니다.';
  const counters=[['배정',counts.assigned],['수집 성공',counts.collected],['수집 제외',counts.skipped],['검수 완료',counts.reviewed],['채택 후보 포함',counts.adopt],['진행·확인 필요',counts.pending]];
@@ -19,7 +21,7 @@ export function renderExploration(d){
   const status=el('span',r.status==='skipped'?'수집 제외':r.status==='reviewed'?'검수 완료':r.status==='attention'?'확인 필요':r.status==='waiting'?'수집 대기':'판단 중','exploration-badge '+r.status);
   item.append(title,status);
   const market=el('div',null,'exploration-market');for(const m of r.markets){const adopted=m.verified&&m.decision==='adopt',node=el(adopted?'a':'span',`${m.productId.startsWith('poizon-')?'POIZON':'KREAM'} ${m.productId} · ${m.verified?(decisions[m.decision]||'검수 완료'):'검수 대기'}${adopted?' →':''}`,m.verified?'verified':'');if(adopted)node.href='/herdr/candidate?run='+encodeURIComponent(d.selected)+'&product='+encodeURIComponent(m.productId);market.append(node);}
-  if(r.diagnosis){const detail=el('details',null,'exploration-diagnosis');detail.append(el('summary',`제외 원인 · ${r.diagnosis.agent?.status==='complete'?'에이전트 분석 완료':'근거 분류 완료'}`));
+  if(r.diagnosis){const detail=el('details',null,'exploration-diagnosis');detail.dataset.sourceId=String(r.sourceId);detail.open=expanded.has(String(r.sourceId));detail.append(el('summary',`제외 원인 · ${r.diagnosis.agent?.status==='complete'?'에이전트 분석 완료':'근거 분류 완료'}`));
    for(const [market,label] of [['kream','KREAM'],['poizon','POIZON']])detail.append(el('p',`${label}: ${r.diagnosis[market]?.label||'세부 원인 미확인'}`));
    if(r.diagnosis.agent?.status==='complete'){detail.append(el('p',r.diagnosis.agent.summary,'diagnosis-agent-summary'),el('p','다음 확인: '+r.diagnosis.agent.nextCheck));}
    if(r.resolution){const labels={recovered:'재수집·독립 검토 완료',still_excluded:'재조회 후에도 수집 제외',rechecking:'재조회 진행 중',wait_for_change:'새 시장 근거 대기',needs_evidence:'추가 근거 필요',needs_attention:'재확인 필요'};detail.append(el('p','해결 담당: '+(labels[r.resolution.status]||r.resolution.status)));if(r.resolution.reason)detail.append(el('p',r.resolution.reason));if(r.resolution.retry?.reason)detail.append(el('p','재조회 결과: '+r.resolution.retry.reason));if(r.resolution.nextCheck)detail.append(el('p','후속 확인: '+r.resolution.nextCheck));for(const p of r.resolution.products||[]){const node=el(p.decision==='adopt'?'a':'p',`${p.productId.startsWith('poizon-')?'POIZON':'KREAM'} ${p.productId} · 독립 검토 ${decisions[p.decision]||p.decision||'완료'}${p.decision==='adopt'?' →':''}`);if(p.decision==='adopt')node.href='/herdr/candidate?run='+encodeURIComponent(d.selected)+'&product='+encodeURIComponent(p.productId);detail.append(node);}}

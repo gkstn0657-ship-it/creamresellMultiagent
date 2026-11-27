@@ -64,9 +64,10 @@ test('coordinator continues after prose-only turns and enforces budget',async t=
 test('Musinsa source selection preserves settings and cross-request deduplication',async t=>{
  const dir=fixture(t),journal=new Journal(path.join(dir,'controller'),{...mission,source:'musinsa-ranking'});journal.save();
  let settings={category:'001',period:'daily'};
- const b=new Backend({journal,root:path.join(dir,'root'),herdr:{},workspaceId:'w',rankingFeed:async()=>({settings:{...settings},total:2,products:[{productId:'1'},{productId:'2'}],observedAt:new Date().toISOString()})});await b.initialize();
+ const b=new Backend({journal,root:path.join(dir,'root'),herdr:{},workspaceId:'w',rankingFeed:async()=>({settings:{...settings},total:3,products:[{productId:'1',productName:'후드 재킷'},{productId:'2',productName:'클래식 스니커즈'},{productId:'3',productName:'클리닉 샴푸 510ml'}],observedAt:new Date().toISOString()})});await b.initialize();
  fs.mkdirSync(path.join(b.root,'musinsa-discovery'),{recursive:true});fs.writeFileSync(path.join(b.root,'musinsa-discovery','state.json'),JSON.stringify({seenSourceIds:['1']}));
  assert.deepEqual((await b.execute('catalog',{fetchNext:true})).candidates.map(x=>x.productId),['2']);
+ await assert.rejects(b.execute('analyze',{productIds:['3'],reason:'screened product'}),/UNOBSERVED_OR_ASSIGNED_PRODUCT/);
  settings.category='002';await assert.rejects(b.execute('catalog',{fetchNext:true}),/SETTINGS_CHANGED/);b.close();
 });
 test('Musinsa skipped source is recorded once and is never a profitable judgment',async t=>{

@@ -1,7 +1,7 @@
 ﻿const $=id=>document.getElementById(id);
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;};
 const active=a=>['tool','thinking','working'].includes(a.status);
-const names={coordinator:'AI 지휘자',supervisor:'연속 실행기',worker:'수집 워커',owner:'상품 판단',reviewer:'독립 검수',owner_retired:'이전 담당',native_subagent:'조사 에이전트'};
+const names={coordinator:'AI 지휘자',supervisor:'연속 실행기',worker:'수집 워커',owner:'상품 판단',reviewer:'독립 검수',purchase_judge:'매입 최종 판단',owner_retired:'이전 담당',native_subagent:'조사 에이전트'};
 const states={tool:'실행 중',thinking:'응답 생성',working:'동작 중',idle:'대기',quiet:'새 기록 대기',finished:'종료',offline:'오프라인',retired:'인계 완료'};
 const tools={collect_no1:'상품 수집',request_review:'검수 응답 대기',read_observations:'원자료 읽기',read_observation:'원자료 읽기',calculate_scenario:'수익 계산',catalog:'후보 탐색',analyze:'작업 배정',wait:'결과 대기',record_review:'검수 저장',publish_assessment:'판단 저장',status:'상태 확인',finish:'작업 종료',connection:'연결 확인'};
 const phase={discovering:'상품 탐색',collecting:'자료 수집',judging:'상품 판단',waiting_for_retry:'재시도 대기',complete:'완료'};

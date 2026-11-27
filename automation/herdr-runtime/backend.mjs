@@ -11,6 +11,7 @@ import {BackgroundClient} from '../no1-background/client.mjs';
 import {readRankingFeed} from '../no1-background/ranking-feed.mjs';
 import {digest} from '../agent-team/store.mjs';
 import {connection} from './connection.mjs';
+import {likelyResaleCandidate} from './ranking-candidate-policy.mjs';
 const worker=fileURLToPath(new URL('./worker.mjs',import.meta.url));
 export function verifiedResult(dir,row) {
   if(row.status!=='complete'||!row.assessment?.reviewId||!/^(?:\d{1,12}|poizon-\d{1,18})$/.test(row.productId))return false;
@@ -74,8 +75,8 @@ export class Backend {
           this.journal.data.catalog=feed;this.journal.save();}
         const memory=read(path.join(this.root,'musinsa-discovery','state.json'))||{};
         const seen=new Set([...(memory.seenSourceIds||[]),...this.journal.data.batches.flatMap(b=>b.productIds)]);
-        const feed=this.journal.data.catalog,candidates=feed.products.filter(p=>!seen.has(p.productId));
-        return {source:'musinsa-ranking',settings:feed.settings,coverage:'current-selected-ranking-context',exhausted:candidates.length===0&&feed.products.length===feed.total,candidates:candidates.slice(0,100),instruction:this.journal.data.mission.continuous?'productIds are Musinsa source IDs. Inspect unseen sources until user STOP; skips remain visible and are never profitable results.':'productIds are Musinsa source IDs. Target counts inspected sources, not profitable products. Skips remain visible.'};
+        const feed=this.journal.data.catalog,unseen=feed.products.filter(p=>!seen.has(p.productId)),candidates=unseen.filter(likelyResaleCandidate);
+        return {source:'musinsa-ranking',settings:feed.settings,coverage:'current-selected-ranking-context',exhausted:candidates.length===0&&feed.products.length===feed.total,screenedOut:unseen.length-candidates.length,candidates:candidates.slice(0,100),instruction:this.journal.data.mission.continuous?'productIds are Musinsa source IDs. Only likely KREAM resale categories are offered; obvious beauty, food and gift cards are screened out before assignment. Inspect unseen sources until user STOP; skips remain visible and are never profitable results.':'productIds are Musinsa source IDs. Only likely KREAM resale categories are offered. Target counts inspected sources, not profitable products. Skips remain visible.'};
       }
       if(args.fetchNext&&!this.store.get('exhausted'))this.store.appendPage(await this.feed(this.store.get('cursor')));
       return {exhausted:this.store.get('exhausted'),cursor:this.store.get('cursor'),candidates:this.store.db.prepare('SELECT payload FROM candidates WHERE batch_id IS NULL ORDER BY rank LIMIT 100').all().map(r=>JSON.parse(r.payload))};
@@ -90,7 +91,7 @@ export class Backend {
       await withWorkLock(this.root,()=>{
         if(this.ranking){
           const memory=read(path.join(this.root,'musinsa-discovery','state.json'))||{},seen=new Set([...(memory.seenSourceIds||[]),...this.journal.data.batches.flatMap(b=>b.productIds)]);
-          products=ids.map(id=>{const p=this.journal.data.catalog?.products.find(p=>p.productId===id);if(!p||seen.has(id))throw Error('UNOBSERVED_OR_ASSIGNED_PRODUCT');return {...p,category:this.journal.data.catalog.settings.category,observedAt:this.journal.data.catalog.observedAt};});
+          products=ids.map(id=>{const p=this.journal.data.catalog?.products.find(p=>p.productId===id);if(!p||seen.has(id)||!likelyResaleCandidate(p))throw Error('UNOBSERVED_OR_ASSIGNED_PRODUCT');return {...p,category:this.journal.data.catalog.settings.category,observedAt:this.journal.data.catalog.observedAt};});
         }else products=ids.map(id=>{const row=this.store.db.prepare('SELECT payload FROM candidates WHERE id=? AND batch_id IS NULL').get(id);if(!row)throw Error('UNOBSERVED_OR_ASSIGNED_PRODUCT');return JSON.parse(row.payload);});
         // Persist the reservation before any external launch. A crash leaves explicit recovery work.
         reserveWork(this.root,{workId:this.journal.data.workId,runId,productCount:ids.length,requestId:runId,scopeHash:crypto.createHash('sha256').update(JSON.stringify(ids)).digest('hex')});

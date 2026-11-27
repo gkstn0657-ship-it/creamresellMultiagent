@@ -1,3 +1,4 @@
+import {purchaseJudgmentCurrent} from './purchase-judgment.mjs';
 import {analysisProfile as validateProfile,MUSINSA_PROFILE,MUSINSA_MESSAGE} from './analysis-profiles.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,7 +21,7 @@ function savedJudgment(dir,packet){
  const file=path.join(dir,'judgments',packet.productId,'team-state.json');
  return fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):null;
 }
-const completed=(saved,packet)=>saved?.status==='complete'&&saved.packetId===packet.id&&Boolean(saved.assessment);
+const completed=(saved,packet)=>saved?.status==='complete'&&saved.packetId===packet.id&&Boolean(saved.assessment)&&purchaseJudgmentCurrent(saved.assessment);
 export async function prepareBatch({seeds,dir,collect,collectDiscovered,mode='live',stopped=()=>false,onEvent=()=>{}}){
  const groups=groupProducts(seeds);fs.mkdirSync(dir,{recursive:true});
  const state={version:'cream-product-batch-v1',mode,status:'prefetching',productCount:groups.length,collected:0,judged:0,results:[],startedAt:new Date().toISOString()};

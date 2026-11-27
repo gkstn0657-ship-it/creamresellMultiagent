@@ -1,3 +1,4 @@
+import {PurchaseJudge,purchaseJudgmentCurrent} from './purchase-judgment.mjs';
 import {analysisProfile,MUSINSA_PROFILE,MUSINSA_MESSAGE,MUSINSA_OWNER,MUSINSA_REVIEWER} from './analysis-profiles.mjs';
 import {saveMusinsaSignals} from './musinsa-signals.mjs';
 import fs from 'node:fs';
@@ -65,6 +66,7 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
   const gapFacts=!focused && (!message || message===GENERAL_PACKET_MESSAGE) && !resume && !previousPacketId && !store.data.ownerThreadId &&
     !store.data.calculations.length && store.data.observations.every(x=>x.active!==false) ? sourceAvailability(packet) : null;
   let gapReview;
+  const purchaseJudge=new PurchaseJudge(store);
   if(focused)saveMusinsaSignals(store);
   const ownerInstructions=(focused?MUSINSA_OWNER:OWNER)+upgradeInstructions+' After a passed independent review, prefer publish_reviewed_assessment with its reviewId to publish the exact saved proposal. If a prior review has no saved proposal, request a fresh review. Prose is not a saved assessment.',reviewInstructions=focused?MUSINSA_REVIEWER:REVIEWER;
   const selectedOwnerTools=[...(focused?ownerTools.filter(t=>!['collect_no1','investigate'].includes(t.name)):ownerTools),{type:'function',...upgradeTool}];
@@ -73,6 +75,7 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
   const emit=(type,data={})=>{store.event(type,data);onEvent({type,...data});};
   const checkStop=()=>{if(stopped||fs.existsSync(path.join(dir,'STOP')))throw Error('STOP_REQUESTED');};
   const server=serverFactory({cwd:dir,onTool:async p=>{
+    if(purchaseJudge.owns(p.threadId)){checkStop();return purchaseJudge.execute(p);}
     if(gapReview?.owns(p.threadId)){checkStop();return gapReview.record(p);}
     if(p.tool==='request_model_upgrade'){
       if(p.threadId!==store.data.ownerThreadId)throw Error('ONLY_OWNER_CAN_UPGRADE');
@@ -125,7 +128,7 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
   try {
     if(fs.existsSync(path.join(dir,'STOP')))throw Error('STOP_REQUESTED');
     const explicitReassessment=Boolean(message && message!==GENERAL_PACKET_MESSAGE && message!==MUSINSA_MESSAGE);
-    if(resume&&!explicitReassessment&&store.data.assessment?.evidenceBasis===store.basis()){
+    if(resume&&!explicitReassessment&&store.data.assessment?.evidenceBasis===store.basis()&&purchaseJudgmentCurrent(store.data.assessment)){
       store.data.status='complete';emit('assessment_complete',{decision:store.data.assessment.decision,readiness:store.data.assessment.readiness,recoveredFrom:'PERSISTED_ASSESSMENT'});return store.data;
     }
     if(resume || previousPacketId){
@@ -153,6 +156,10 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
         }
       }catch(e){emit('control_error',{code:e.message});}finally{controlBusy=false;}
     },1000);
+    if(resume&&!explicitReassessment&&store.data.assessment?.evidenceBasis===store.basis()){
+      await purchaseJudge.run(server,actor,checkStop,emit);
+      store.data.status='complete';emit('assessment_complete',{decision:store.data.assessment.decision,readiness:store.data.assessment.readiness});return store.data;
+    }
     if(gapFacts){
       gapReview=new SourceAvailabilityReview(store,packet,gapFacts);
       store.data.status='running';emit('source_availability_started',{packetId:packet.id});
@@ -210,6 +217,7 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
       emit('autonomous_recovery_started',{threadId,attempt:repairPasses,failures,upgradePending:!!store.data.pendingModelUpgrade});
     }while(store.data.pendingModelUpgrade||repairMessage&&repairPasses<=2);
     if(!store.data.assessment||store.data.assessment.evidenceBasis!==store.basis())throw Error('ASSESSMENT_NOT_COMPLETE');
+    await purchaseJudge.run(server,actor,checkStop,emit);
     store.data.status='complete';emit('assessment_complete',{decision:store.data.assessment.decision,readiness:store.data.assessment.readiness});
     return store.data;
   }catch(e){
@@ -219,7 +227,7 @@ export async function runTeam({dir,mission,packet=null,resume=false,replay=null,
     // retrying the same completed review forever.
     const persisted=fs.existsSync(store.file)?JSON.parse(fs.readFileSync(store.file,'utf8')):null;
     const assessment=store.data.assessment||persisted?.assessment;
-    if(!stopped&&e.message!=='STOP_REQUESTED'&&assessment?.evidenceBasis===store.basis()){
+    if(!stopped&&e.message!=='STOP_REQUESTED'&&assessment?.evidenceBasis===store.basis()&&purchaseJudgmentCurrent(assessment)){
       store.data.assessment=assessment;store.data.status='complete';emit('assessment_complete',{decision:assessment.decision,readiness:assessment.readiness,recoveredFrom:e.message});return store.data;
     }
     store.data.status=stopped||e.message==='STOP_REQUESTED'?'stopped':'needs_attention';emit('run_incomplete',{code:e.message});throw e;

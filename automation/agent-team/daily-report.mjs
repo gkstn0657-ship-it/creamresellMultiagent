@@ -50,7 +50,7 @@ function reportEntry(workId, runId, row, packet) {
     id: [workId, runId, row.productId].join('/'),
     title: name.replace(/\s+/g, ' ').replaceAll('<!--', '&lt;!--'),
     status: decisions[assessment.decision],
-    details: [assessment.reason, ...(gaps.length ? ['확인할 항목 · ' + gaps.join(', ')] : [])]
+    details: [assessment.reason, ...(assessment.purchaseJudgment?['매입 최종 판단 · '+({recommend_buy:'매입 권고',do_not_buy:'매입 비권고',hold:'판단 보류'}[assessment.purchaseJudgment.decision]),assessment.purchaseJudgment.reason,'재검토 조건 · '+assessment.purchaseJudgment.reconsiderWhen.join(' / ')]:[]), ...(gaps.length ? ['확인할 항목 · ' + gaps.join(', ')] : [])]
       .join('\n\n').replaceAll('<!--', '&lt;!--'),
     sources
   };

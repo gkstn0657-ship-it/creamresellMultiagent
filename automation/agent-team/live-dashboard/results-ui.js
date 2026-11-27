@@ -21,7 +21,9 @@ export function renderResults(d){
  if(classification(p)==='adopt'){const link=el('a');link.href='/herdr/candidate?run='+encodeURIComponent(d.selected)+'&product='+encodeURIComponent(p.productId);link.append(titleText);title.append(link);}else title.append(titleText);
  title.append(el('small',(String(p.productId).startsWith('poizon-')?'POIZON':'KREAM')+' · '+p.productId));
  const badge=el('span',names[classification(p)],'result-badge '+classification(p));summary.append(title,badge,el('span',p.verified?'검수 확인':'검수 미완료','result-review'));detail.append(summary);
- const content=el('div',null,'result-body');content.append(el('p',p.reason||p.error||'판단 결과를 기다리고 있습니다.','result-reason'));
+ const content=el('div',null,'result-body');
+ if(p.details?.purchaseJudgment){const j=p.details.purchaseJudgment,box=el('div',null,'result-gaps');box.append(el('strong','매입 최종 판단 · '+({recommend_buy:'매입 권고',do_not_buy:'매입 비권고',hold:'판단 보류'}[j.decision]||'미확인')),el('p',j.reason));const list=el('ul');for(const condition of j.reconsiderWhen||[])list.append(el('li',condition));box.append(el('strong','재검토 조건'),list);content.append(box);}
+ content.append(el('p',p.reason||p.error||'판단 결과를 기다리고 있습니다.','result-reason'));
  if(classification(p)==='adopt'){const link=el('a','채택 후보 상세 보기 →','result-detail-link');link.href='/herdr/candidate?run='+encodeURIComponent(d.selected)+'&product='+encodeURIComponent(p.productId);content.append(link);}
  if(p.details?.sourceUrl){try{const u=new URL(p.details.sourceUrl);if(u.protocol==='https:'&&['www.musinsa.com','musinsa.com'].includes(u.hostname)){const link=el('a','구매처 상품 보기 ↗');link.href=u.href;link.target='_blank';link.rel='noopener noreferrer';content.append(link);}}catch{}}
  const table=el('table'),thead=el('thead'),tr=el('tr');for(const h of ['시장 / 옵션','재고','30일 판매량¹','판매 방식','예상 마진²','수익률²'])tr.append(el('th',h));thead.append(tr);table.append(thead);const body=el('tbody');
