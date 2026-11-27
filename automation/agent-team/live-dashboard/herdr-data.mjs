@@ -18,7 +18,7 @@ const safe=id=>typeof id==='string'&&/^[a-zA-Z0-9_-]+$/.test(id);
 export function herdrRuns(root=defaultRuns){
  return [...continuousRuns(path.join(root,'agent-teams')),...dirs(root).flatMap(id=>{if(!safe(id))return [];const state=read(path.join(root,id,'state.json'));try{validateMission(state?.mission);}catch{return [];}
  if(!Array.isArray(state.batches)||!state.session)return [];
- return [{id,status:state.status,source:state.mission.source,target:state.mission.targetProducts,updatedAt:fs.statSync(path.join(root,id,'state.json')).mtime.toISOString()}];
+ return [{id,status:state.status,source:state.mission.source,target:state.mission.continuous?null:state.mission.targetProducts,updatedAt:fs.statSync(path.join(root,id,'state.json')).mtime.toISOString()}];
  })].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
 }
 export function herdrData(root=defaultRuns,id){
@@ -56,10 +56,10 @@ export async function herdrAction(root,id,action,maxTurns){
  if(data.continuous){await withWorkLock(path.join(root,'agent-teams'),()=>stopWork(path.join(root,'agent-teams'),id));return {ok:true,action,runId:id,message:'연속 탐색 중지를 요청했습니다.'};}
  const args=[fileURLToPath(new URL('../../herdr-runtime/run.mjs',import.meta.url)),action,`--dir=${path.join(root,id)}`];
  if(action==='resume'){
-  const limit=maxTurns??data.mission.maxTurns;
-  validateMission({...data.mission,maxTurns:limit});
-  if(limit<=data.turns)throw Error('TURN_BUDGET_EXHAUSTED');
-  args.push(`--max-turns=${limit}`);
+  if(!data.mission.continuous){const limit=maxTurns??data.mission.maxTurns;
+    validateMission({...data.mission,maxTurns:limit});
+    if(limit<=data.turns)throw Error('TURN_BUDGET_EXHAUSTED');
+    args.push(`--max-turns=${limit}`);}
  }
  await exec(process.execPath,args,{windowsHide:true,timeout:30000,maxBuffer:1024*1024});
  return {ok:true,action,runId:id,message:action==='stop'?'중지를 요청했습니다. 프로세스 종료 여부를 확인 중입니다.':'재개를 요청했습니다. 지휘자 연결 여부를 확인 중입니다.'};

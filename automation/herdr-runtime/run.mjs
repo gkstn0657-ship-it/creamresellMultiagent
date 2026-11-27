@@ -7,6 +7,9 @@ import {Journal,read,lock,validateMission,alive} from './state.mjs';
 import {withWorkLock,reopenWork} from '../agent-team/work-orders.mjs';
 import {Backend} from './backend.mjs';
 import {coordinate} from './coordinator.mjs';
+import {connection} from './connection.mjs';
+import {readRankingFeed} from '../no1-background/ranking-feed.mjs';
+import {BackgroundClient} from '../no1-background/client.mjs';
 const project=fileURLToPath(new URL('../../',import.meta.url));
 export async function startServer(session) {
   const h=new Herdr({session});try{await h.call('workspace','list');return h;}catch{}
@@ -24,7 +27,8 @@ export async function main(argv=process.argv.slice(2)) {
   if(command==='stop'){if(!read(path.join(dir,'state.json')))throw Error('RUN_NOT_FOUND');fs.writeFileSync(path.join(dir,'STOP'),'user stop');const journal=new Journal(dir);const backend=new Backend({journal,root:journal.data.root});await backend.stop();console.log('Stop requested');return;}
   if(command==='start') {
     if(read(path.join(dir,'state.json')))throw Error('RUN_EXISTS_USE_RESUME');
-    const mission=validateMission({instruction:arg('instruction'),targetProducts:Number(arg('target')),source:arg('source')||'musinsa-ranking',maxTurns:Number(arg('max-turns')||100)});
+    const continuous=argv.includes('--continuous');
+    const mission=validateMission({instruction:arg('instruction'),targetProducts:Number(arg('target')||(continuous?5:NaN)),source:arg('source')||'musinsa-ranking',maxTurns:Number(arg('max-turns')||100),...(continuous?{continuous:true}:{}),...(arg('replace-work')?{replaceWorkId:arg('replace-work')}: {})});
     const journal=new Journal(dir,mission);journal.data.root=path.resolve(arg('root')||path.join(project,'kream-runs','agent-teams'));journal.save();
     const h=await startServer(session),created=await h.create(project,'Cream autonomous');
     const pane=created.root_pane?.pane_id,workspace=created.workspace?.workspace_id;
@@ -50,7 +54,22 @@ export async function main(argv=process.argv.slice(2)) {
   if(journal.stopped()){release();throw Error('STOP_REQUIRES_EXPLICIT_RESUME');}
   if(journal.data.status==='complete'){release();return;}
   const backend=new Backend({journal,root:journal.data.root,herdr:h,workspaceId:journal.data.workspaceId});
-  try {await backend.initialize();await coordinate({journal,backend,report:(state,message)=>h.report(journal.data.paneId,state,message)});}
+  try {
+    if(journal.data.mission.continuous){
+      while(!journal.stopped()){
+        const link=await connection({repairLocalBridge:true});
+        let reason=link.code||null;
+        if(link.ready&&journal.data.mission.source==='musinsa-ranking')try{await readRankingFeed(new BackgroundClient(),{limit:1000});reason=null;}catch(e){reason=e.message;}
+        if(link.ready&&!reason)break;
+        journal.data.status='waiting_connection';journal.data.waitReason=reason||'NO1_NOT_READY';journal.save();
+        await h.report(journal.data.paneId,'blocked',journal.data.waitReason).catch(()=>{});
+        for(let i=0;i<30&&!journal.stopped();i++)await new Promise(r=>setTimeout(r,1000));
+      }
+      if(journal.stopped())throw Error('STOP_REQUESTED');
+      delete journal.data.waitReason;journal.data.status='ready';journal.save();
+    }
+    await backend.initialize();await coordinate({journal,backend,report:(state,message)=>h.report(journal.data.paneId,state,message)});
+  }
   catch(e){journal.data.status=journal.stopped()?'stopped':'needs_attention';journal.data.error=e.message;journal.save();throw e;}
   finally {backend.close();release();}
 }

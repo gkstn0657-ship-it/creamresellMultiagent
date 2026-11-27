@@ -9,6 +9,7 @@ import {Herdr} from './herdr.mjs';
 import {coordinate} from './coordinator.mjs';
 import {rankingWorker} from './ranking-worker.mjs';
 import {worker} from './worker.mjs';
+import {startWork,continueWorkUntilStopped,workOrders} from '../agent-team/work-orders.mjs';
 import {makePacket} from '../agent-team/packets.mjs';
 const mission={instruction:'Inspect two products, no purchases',targetProducts:2,source:'kream-popularity',maxTurns:3};
 test('coordinator upgrade transfers progress and preserves turn budget',async t=>{
@@ -27,7 +28,30 @@ function fixture(t,manualCleanup=false){const dir=fs.mkdtempSync(path.join(os.tm
 async function backend(t){const dir=fixture(t,true),journal=new Journal(path.join(dir,'controller'),mission);journal.save();const calls=[];
  const h={session:'test',call:async(...a)=>{calls.push(a);return {root_pane:{pane_id:'test-pane'}};},launch:async()=>({queued:true})};
  const b=new Backend({journal,root:path.join(dir,'root'),workspaceId:'test-workspace',herdr:h,feed:async cursor=>({cursor,nextCursor:null,observedAt:new Date().toISOString(),items:[1,2,3].map(id=>({productCode:String(id),titleKo:'shoe',brandProductCode:'M'+id}))})});await b.initialize();t.after(()=>{b.close();clean(dir);});return b;}
-test('scope validation rejects missing target and unsupported source',()=>{assert.throws(()=>validateMission({...mission,targetProducts:NaN}));assert.throws(()=>validateMission({...mission,source:'invented'}));});
+test('scope validation rejects missing target and unsupported source',()=>{assert.throws(()=>validateMission({...mission,targetProducts:NaN}));assert.throws(()=>validateMission({...mission,source:'invented'}));assert.throws(()=>validateMission({...mission,continuous:true}),/CONTINUOUS_MUSINSA_ONLY/);});
+test('continuous Musinsa work has no completion target and stops only on STOP',async t=>{
+ const dir=fixture(t),journal=new Journal(path.join(dir,'controller'),{...mission,source:'musinsa-ranking',continuous:true});journal.save();
+ const b=new Backend({journal,root:path.join(dir,'root'),herdr:{},workspaceId:'w',rankingFeed:async()=>({settings:{category:'001'},total:0,products:[],observedAt:new Date().toISOString()})});
+ await b.initialize();t.after(()=>b.close());
+ assert.equal(b.status().target,null);assert.equal(b.status().continuous,true);
+ await assert.rejects(b.execute('finish',{outcome:'complete',reason:'count reached'}),/CONTINUOUS_WORK/);
+ await assert.rejects(b.execute('finish',{outcome:'source_exhausted',reason:'current ranking empty'}),/CONTINUOUS_WORK/);
+});
+test('continuous coordinator outlives a finite turn budget until STOP',async t=>{
+ const journal=new Journal(fixture(t),{...mission,source:'musinsa-ranking',continuous:true,maxTurns:1});let turns=0;
+ await assert.rejects(coordinate({journal,backend:{execute:async()=>({completed:0,target:null,batches:[]}),stop:async()=>{}},serverFactory:()=>({start:async()=>{},startThread:async()=>({thread:{id:'t'}}),runTurn:async()=>{if(++turns===2)fs.writeFileSync(path.join(journal.dir,'STOP'),'stop');},close:async()=>{}})}),/STOP_REQUESTED/);
+ assert.equal(turns,2);assert.equal(journal.data.status,'stopped');
+});
+test('explicit continuous handoff stops only the selected idle work',async t=>{
+ const dir=fixture(t),root=path.join(dir,'root');
+ const old=startWork(root,{targetSources:5,userInstruction:'previous continuous run',requestId:'previous-run'});
+ continueWorkUntilStopped(root,old.workId);
+ const journal=new Journal(path.join(dir,'controller'),{...mission,source:'musinsa-ranking',continuous:true,replaceWorkId:old.workId});journal.save();
+ const b=new Backend({journal,root,herdr:{},workspaceId:'w'});await b.initialize();t.after(()=>b.close());
+ assert.equal(workOrders(root).find(w=>w.id===old.workId).status,'stopped');
+ assert.notEqual(journal.data.workId,old.workId);
+ assert.equal(workOrders(root).find(w=>w.id===journal.data.workId).continuous,true);
+});
 test('controller lock refuses duplicate execution',t=>{const dir=fixture(t),release=lock(dir);assert.throws(()=>lock(dir),/ALREADY_RUNNING/);release();lock(dir)();});
 test('launch quoting preserves shell metacharacters as literal argv',async()=>{let call;const h=new Herdr({run:async(...a)=>{call=a;return {stdout:'{"result":{"ok":true}}'};}});await h.launch('p1',"C:/a'b/$x.mjs",['$(Get-Secret)']);const command=call[1].at(-1),script=Buffer.from(command.split(' ').at(-1),'base64').toString('utf16le');assert.match(script,/'C:\/a''b\/\$x.mjs'/);assert.match(script,/'\$\(Get-Secret\)'/);});
 test('unobserved products, duplicates and count overflow cannot launch',async t=>{const b=await backend(t);await b.execute('catalog',{fetchNext:true});await assert.rejects(b.execute('analyze',{productIds:['9'],reason:'x'}),/UNOBSERVED/);await assert.rejects(b.execute('analyze',{productIds:['1','1'],reason:'x'}),/INVALID/);await assert.rejects(b.execute('analyze',{productIds:['1','2','3'],reason:'x'}),/SCOPE/);assert.equal(b.status().assigned,0);});

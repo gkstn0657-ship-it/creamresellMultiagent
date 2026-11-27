@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {DiscoveryStore} from '../agent-team/discovery-store.mjs';
 import {createDiscoveryFeed} from '../agent-team/discovery-feed.mjs';
-import {startWork,reserveWork,withWorkLock,workOrders,workSummary,stopWork} from '../agent-team/work-orders.mjs';
+import {startWork,reserveWork,continueWorkUntilStopped,withWorkLock,workOrders,workSummary,stopWork} from '../agent-team/work-orders.mjs';
 import {writeJsonAtomic as write} from '../agent-team/atomic-json.mjs';
 import {read,alive} from './state.mjs';
 import {BackgroundClient} from '../no1-background/client.mjs';
@@ -24,11 +24,17 @@ export class Backend {
   constructor({journal,root,herdr,workspaceId,feed=createDiscoveryFeed(),rankingFeed=()=>readRankingFeed(new BackgroundClient(),{limit:1000})}) {Object.assign(this,{journal,root,herdr,workspaceId,feed,rankingFeed});this.ranking=journal.data.mission.source==='musinsa-ranking';}
   async initialize() {
     await withWorkLock(this.root,()=>{
+      if(this.journal.data.mission.replaceWorkId){
+        const old=workOrders(this.root).find(w=>w.id===this.journal.data.mission.replaceWorkId);
+        if(!old||old.continuous!==true||workSummary(this.root,old).activeRunIds.length||workSummary(this.root,old).exploration?.workerAlive)throw Error('REPLACED_WORK_NOT_IDLE_CONTINUOUS');
+        if(old.status!=='stopped')stopWork(this.root,old.id);
+      }
       const others=workOrders(this.root).filter(w=>w.id!==this.journal.data.workId&&w.status!=='stopped'&&workSummary(this.root,w).status!=='complete');
       if(others.length)throw Error('EXISTING_WORK_REQUIRES_RECONCILIATION');
       if(!this.journal.data.workId) {
         const work=startWork(this.root,{...(this.ranking?{targetSources:this.journal.data.mission.targetProducts}:{targetProducts:this.journal.data.mission.targetProducts}),userInstruction:this.journal.data.mission.instruction,requestId:'herdr:'+crypto.createHash('sha256').update(this.journal.dir).digest('hex')});
         this.journal.data.workId=work.workId||work.id;this.journal.save();
+        if(this.journal.data.mission.continuous)continueWorkUntilStopped(this.root,this.journal.data.workId);
       }
     });
     if(!this.ranking){this.store=new DiscoveryStore(path.join(this.root,'discovery'));this.store.importCompleted(this.root);}
@@ -40,9 +46,9 @@ export class Backend {
       return {...b,status:state?.status||'launch_pending',workerAlive:alive(proc?.pid),error:state?.error||null,sourceResults:sourceState?.results||[],
         results:(state?.results||[]).map(r=>({productId:r.productId,status:r.status,decision:r.assessment?.decision,reviewId:r.assessment?.reviewId,verified:verifiedResult(dir,r),error:r.error}))};
     });
-    const result={workId:this.journal.data.workId,status:this.journal.data.status,target:this.journal.data.mission.targetProducts,
+    const result={workId:this.journal.data.workId,status:this.journal.data.status,continuous:this.journal.data.mission.continuous===true,target:this.journal.data.mission.continuous?null:this.journal.data.mission.targetProducts,
       unit:this.ranking?'inspected-sources':'reviewed-products',assigned:batches.reduce((n,b)=>n+b.productIds.length,0),completed:batches.reduce((n,b)=>n+(this.ranking?(b.status==='complete'?b.sourceResults.filter(r=>r.status==='skipped'||b.results.some(p=>p.productId===r.packetProductId&&p.verified)).length:0):b.results.filter(r=>r.verified).length),0),batches};
-    if(this.ranking&&this.journal.data.workId)write(path.join(this.root,'explorations',this.journal.data.workId,'state.json'),{managedBy:'herdr-autonomous',checkedSources:result.completed,status:result.completed===result.target?'complete':this.journal.data.status});
+    if(this.ranking&&this.journal.data.workId)write(path.join(this.root,'explorations',this.journal.data.workId,'state.json'),{managedBy:'herdr-autonomous',checkedSources:result.completed,status:!result.continuous&&result.completed===result.target?'complete':this.journal.data.status});
     return result;
   }
   assertNoActive() {
@@ -69,7 +75,7 @@ export class Backend {
         const memory=read(path.join(this.root,'musinsa-discovery','state.json'))||{};
         const seen=new Set([...(memory.seenSourceIds||[]),...this.journal.data.batches.flatMap(b=>b.productIds)]);
         const feed=this.journal.data.catalog,candidates=feed.products.filter(p=>!seen.has(p.productId));
-        return {source:'musinsa-ranking',settings:feed.settings,coverage:'current-selected-ranking-context',exhausted:candidates.length===0&&feed.products.length===feed.total,candidates:candidates.slice(0,100),instruction:'productIds are Musinsa source IDs. Target counts inspected sources, not profitable products. Skips remain visible.'};
+        return {source:'musinsa-ranking',settings:feed.settings,coverage:'current-selected-ranking-context',exhausted:candidates.length===0&&feed.products.length===feed.total,candidates:candidates.slice(0,100),instruction:this.journal.data.mission.continuous?'productIds are Musinsa source IDs. Inspect unseen sources until user STOP; skips remain visible and are never profitable results.':'productIds are Musinsa source IDs. Target counts inspected sources, not profitable products. Skips remain visible.'};
       }
       if(args.fetchNext&&!this.store.get('exhausted'))this.store.appendPage(await this.feed(this.store.get('cursor')));
       return {exhausted:this.store.get('exhausted'),cursor:this.store.get('cursor'),candidates:this.store.db.prepare('SELECT payload FROM candidates WHERE batch_id IS NULL ORDER BY rank LIMIT 100').all().map(r=>JSON.parse(r.payload))};
@@ -78,7 +84,7 @@ export class Backend {
       this.assertNoActive();const ids=args.productIds;
       if(!Array.isArray(ids)||ids.length<1||ids.length>5||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'||!/^\d{1,12}$/.test(id)))throw Error('INVALID_PRODUCT_IDS');
       if(typeof args.reason!=='string'||!args.reason.trim())throw Error('DECISION_REASON_REQUIRED');
-      if(this.status().assigned+ids.length>this.journal.data.mission.targetProducts)throw Error('TARGET_SCOPE_EXCEEDED');
+      if(!this.journal.data.mission.continuous&&this.status().assigned+ids.length>this.journal.data.mission.targetProducts)throw Error('TARGET_SCOPE_EXCEEDED');
       const runId='batch-'+crypto.randomUUID(),dir=path.join(this.root,runId);
       let products;
       await withWorkLock(this.root,()=>{
@@ -116,6 +122,7 @@ export class Backend {
     if(tool==='finish') {
       const status=this.status();
       if(!['complete','blocked','source_exhausted'].includes(args.outcome)||typeof args.reason!=='string'||!args.reason.trim())throw Error('INVALID_FINISH');
+      if(this.journal.data.mission.continuous)throw Error('CONTINUOUS_WORK_STOPS_ONLY_ON_USER_STOP');
       if(status.batches.some(b=>b.workerAlive||b.status==='launch_pending'))throw Error('WORKERS_STILL_ACTIVE');
       if(args.outcome!=='complete'&&status.completed===status.target&&status.batches.every(b=>b.status==='complete'))throw Error('INSPECTION_TARGET_REACHED_USE_COMPLETE_REPORT_SKIPS');
       if(args.outcome==='complete'&&(status.completed!==status.target||status.batches.some(b=>b.status!=='complete')))throw Error('UNVERIFIED_COMPLETION');

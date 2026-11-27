@@ -13,8 +13,11 @@ export function lock(dir) {
 }
 export function validateMission(m) {
   if(!m||typeof m.instruction!=='string'||!m.instruction.trim()||m.instruction.length>4000)throw Error('MISSION_INSTRUCTION_REQUIRED');
+  if(m.continuous!==undefined&&typeof m.continuous!=='boolean')throw Error('INVALID_CONTINUOUS_SCOPE');
+  if(m.replaceWorkId!==undefined&&!/^work-[a-f0-9-]{36}$/.test(m.replaceWorkId))throw Error('INVALID_REPLACED_WORK');
   if(!Number.isSafeInteger(m.targetProducts)||m.targetProducts<1||m.targetProducts>500)throw Error('TARGET_PRODUCTS_REQUIRED_1_TO_500');
   if(!['kream-popularity','musinsa-ranking'].includes(m.source))throw Error('UNSUPPORTED_SOURCE');
+  if(m.continuous&&m.source!=='musinsa-ranking')throw Error('CONTINUOUS_MUSINSA_ONLY');
   if(!Number.isSafeInteger(m.maxTurns)||m.maxTurns<1||m.maxTurns>1000)throw Error('INVALID_TURN_BUDGET');
   return m;
 }
